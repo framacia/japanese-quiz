@@ -12,6 +12,7 @@ Open [`quiz.html`](quiz.html) directly in a browser. No build step or local serv
 - Words and example-sentence practice
 - Hiragana, Katakana, and All filters
 - Reading and Translation answer modes
+- Customizable accent colour with a saved preference
 - Furigana displayed above kanji in sentences
 - Romaji answers for reading questions
 - Score, streak, question count, and answer history
