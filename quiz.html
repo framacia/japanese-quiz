@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>JLPT Japanese Quiz</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/wanakana@5.3.1/wanakana.min.js"></script>
+  <script src="n5-vocabulary-database.js"></script>
+
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #151d2a;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --text: #f8fafc;
+      --text-dim: #94a3b8;
+      --correct: #22c55e;
+      --incorrect: #ef4444;
+      --border: #1e293b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 440px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+
+    .mode-toggle {
+      display: flex;
+      background: #0b0f19;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px;
+      margin-top: 12px;
+    }
+
+    .content-toggle {
+      margin-top: 8px;
+    }
+
+    .mode-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      padding: 6px 0;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .mode-btn.active {
+      background: var(--accent);
+      color: #0b0f19;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      font-weight: 600;
+      margin: 12px 0 16px 0;
+    }
+
+    .card {
+      background: #0b0f19;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px 16px;
+      text-align: center;
+      margin-bottom: 16px;
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .jp-display {
+      font-size: 3rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .jp-display.sentence {
+      font-size: 1.75rem;
+      letter-spacing: 0;
+    }
+
+    .jp-display ruby {
+      ruby-position: over;
+    }
+
+    .jp-display rt {
+      color: var(--accent);
+      font-size: 0.42em;
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .kanji-sub {
+      font-size: 1rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+      min-height: 1.2em;
+    }
+
+    .hint-display {
+      font-size: 0.85rem;
+      color: var(--accent);
+      margin-top: 8px;
+      min-height: 1.2em;
+      visibility: hidden;
+      font-weight: 600;
+    }
+
+    .hint-display.visible {
+      visibility: visible;
+    }
+
+    .feedback {
+      text-align: center;
+      font-size: 0.9rem;
+      font-weight: 700;
+      min-height: 24px;
+      margin-bottom: 12px;
+    }
+
+    .feedback.correct { color: var(--correct); }
+    .feedback.incorrect { color: var(--incorrect); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .opt-btn {
+      background: #0b0f19;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 14px 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .opt-btn.correct {
+      background: var(--correct) !important;
+      border-color: var(--correct) !important;
+      color: #fff;
+    }
+
+    .opt-btn.incorrect {
+      background: var(--incorrect) !important;
+      border-color: var(--incorrect) !important;
+      color: #fff;
+    }
+
+    .input-container {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .text-input {
+      flex: 1;
+      background: #0b0f19;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+    }
+
+    .text-input:focus {
+      border-color: var(--accent);
+    }
+
+    .submit-btn {
+      background: var(--accent);
+      color: #0b0f19;
+      border: none;
+      padding: 0 18px;
+      font-weight: 700;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    .action-btn {
+      width: 100%;
+      background: var(--accent);
+      color: #0b0f19;
+      border: none;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: 12px;
+      cursor: pointer;
+      display: none;
+      box-shadow: 0 4px 15px var(--accent-glow);
+    }
+
+    .status-badge {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-align: center;
+      margin-top: 12px;
+    }
+
+    .history {
+      margin-top: 20px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    .history h2 {
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+    }
+
+    .history-list {
+      display: grid;
+      gap: 8px;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .history-item {
+      background: #0b0f19;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--text-dim);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.78rem;
+    }
+
+    .history-item.correct { border-left-color: var(--correct); }
+    .history-item.incorrect { border-left-color: var(--incorrect); }
+
+    .history-prompt {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .history-detail {
+      color: var(--text-dim);
+      margin-top: 3px;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app">
+    <header>
+      <h1>JLPT N5 Japanese Quiz</h1>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-quiz-mode" onclick="setMode('choice')">Multiple Choice</button>
+        <button class="mode-btn" id="btn-type-mode" onclick="setMode('type')">Keyboard Input</button>
+      </div>
+      <div class="mode-toggle content-toggle">
+        <button class="mode-btn active" id="btn-word-content" onclick="setContent('word')">Words</button>
+        <button class="mode-btn" id="btn-sentence-content" onclick="setContent('sentence')">Sentences</button>
+      </div>
+      <div class="mode-toggle content-toggle">
+        <button class="mode-btn active" id="btn-hiragana-script" onclick="setScript('hiragana')">Hiragana</button>
+        <button class="mode-btn" id="btn-katakana-script" onclick="setScript('katakana')">Katakana</button>
+        <button class="mode-btn" id="btn-all-script" onclick="setScript('all')">All</button>
+      </div>
+      <div class="mode-toggle content-toggle" id="answer-type-toggle">
+        <button class="mode-btn active" id="btn-reading-answer" onclick="setSentenceAnswerMode('reading')">Reading</button>
+        <button class="mode-btn" id="btn-translation-answer" onclick="setSentenceAnswerMode('translation')">Translation</button>
+      </div>
+    </header>
+
+    <div class="stats">
+      <span>Score: <strong id="score">0</strong></span>
+      <span>Streak: <strong id="streak">0</strong> 🔥</span>
+      <span>Questions: <strong id="question-count">0</strong></span>
+    </div>
+
+    <div class="card">
+      <div class="jp-display" id="jp">Loading...</div>
+      <div class="kanji-sub" id="kanji-sub"></div>
+      <div class="hint-display" id="hint">--</div>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+
+    <div class="grid" id="options"></div>
+
+    <div class="input-container" id="type-container" style="display: none;">
+      <input type="text" class="text-input" id="answer-input" placeholder="Type romaji or hiragana..." autocomplete="off" autocorrect="off" autocapitalize="none">
+      <button class="submit-btn" id="submit-input-btn" onclick="submitTypedAnswer()">Check</button>
+    </div>
+
+    <button class="action-btn" id="next-btn" onclick="loadNextQuestion()">Next Question →</button>
+    <div class="status-badge" id="data-status">Loading local N5 vocabulary...</div>
+
+    <section class="history" aria-labelledby="history-title">
+      <h2 id="history-title">History</h2>
+      <div class="history-list" id="history-list" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <script>
+    let vocabularyList = [];
+    let currentQuestion = null;
+    let currentMode = 'choice';
+    let currentContent = 'word';
+    let currentScript = 'hiragana';
+    let sentenceAnswerMode = 'reading';
+    let score = 0;
+    let streak = 0;
+    let questionCount = 0;
+    let previousKana = '';
+    let answerHistory = [];
+
+    async function loadVocabularyDatabase() {
+      const statusElem = document.getElementById('data-status');
+      const jpDisplay = document.getElementById('jp');
+
+      try {
+        let data = window.N5_VOCABULARY;
+        if (!Array.isArray(data)) {
+          const response = await fetch('n5-vocabulary-database.json', { cache: 'no-store' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          data = await response.json();
+        }
+        if (!Array.isArray(data) || data.length < 4) {
+          throw new Error('The local N5 database is empty or invalid');
+        }
+
+        vocabularyList = data.map(item => ({
+          ...item,
+          romaji: wanakana.toRomaji(item.kana)
+        }));
+        const sentenceCount = vocabularyList.filter(item => item.kind === 'sentence').length;
+        const wordCount = vocabularyList.length - sentenceCount;
+        statusElem.textContent = `Ready! ${wordCount} words and ${sentenceCount} sentences loaded.`;
+        loadNextQuestion();
+      } catch (error) {
+        statusElem.textContent = `Error loading local vocabulary: ${error.message}`;
+        jpDisplay.textContent = 'Load Error';
+      }
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('btn-quiz-mode').classList.toggle('active', mode === 'choice');
+      document.getElementById('btn-type-mode').classList.toggle('active', mode === 'type');
+      loadNextQuestion();
+    }
+
+    function setContent(content) {
+      currentContent = content;
+      document.getElementById('btn-word-content').classList.toggle('active', content === 'word');
+      document.getElementById('btn-sentence-content').classList.toggle('active', content === 'sentence');
+      previousKana = '';
+      loadNextQuestion();
+    }
+
+    function setSentenceAnswerMode(mode) {
+      sentenceAnswerMode = mode;
+      document.getElementById('btn-reading-answer').classList.toggle('active', mode === 'reading');
+      document.getElementById('btn-translation-answer').classList.toggle('active', mode === 'translation');
+      loadNextQuestion(true);
+    }
+
+    function setScript(script) {
+      currentScript = script;
+      document.getElementById('btn-hiragana-script').classList.toggle('active', script === 'hiragana');
+      document.getElementById('btn-katakana-script').classList.toggle('active', script === 'katakana');
+      document.getElementById('btn-all-script').classList.toggle('active', script === 'all');
+      previousKana = '';
+      loadNextQuestion();
+    }
+
+    function getSentenceReading(item) {
+      if (!Array.isArray(item.furigana)) return wanakana.toHiragana(item.kana);
+      return item.furigana.map(segment => segment.reading || segment.text).join('');
+    }
+
+    function getExpectedDisplayAnswer(item) {
+      if (sentenceAnswerMode === 'translation') return item.meaning;
+      return item.kind === 'sentence'
+        ? wanakana.toRomaji(getSentenceReading(item))
+        : item.romaji;
+    }
+
+    function getExpectedValidationAnswer(item) {
+      const displayAnswer = getExpectedDisplayAnswer(item);
+      return sentenceAnswerMode === 'reading'
+        ? wanakana.toRomaji(displayAnswer)
+        : displayAnswer.toLowerCase();
+    }
+
+    function loadNextQuestion(keepCurrent = false) {
+      if (!vocabularyList.length) return;
+
+      const contentQuestions = vocabularyList.filter(item => currentContent === 'sentence'
+        ? item.kind === 'sentence'
+        : item.kind !== 'sentence');
+      const scriptQuestions = contentQuestions.filter(item => {
+        const hasKatakana = /[\u30A0-\u30FF]/.test(item.kana);
+        return currentScript === 'all'
+          || (currentScript === 'katakana' && hasKatakana)
+          || (currentScript === 'hiragana' && !hasKatakana);
+      });
+      if (!scriptQuestions.length) return;
+
+      const shouldKeepCurrent = keepCurrent && currentQuestion && scriptQuestions.includes(currentQuestion);
+      if (!shouldKeepCurrent) {
+        const availableQuestions = scriptQuestions.length > 1
+          ? scriptQuestions.filter(item => item.kana !== previousKana)
+          : scriptQuestions;
+        currentQuestion = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
+        previousKana = currentQuestion.kana;
+        questionCount += 1;
+        document.getElementById('question-count').textContent = questionCount;
+      }
+
+      const jpDisplay = document.getElementById('jp');
+      jpDisplay.classList.toggle('sentence', currentQuestion.kind === 'sentence');
+      jpDisplay.replaceChildren();
+      if (currentQuestion.kind === 'sentence' && Array.isArray(currentQuestion.furigana)) {
+        currentQuestion.furigana.forEach(segment => {
+          const ruby = document.createElement('ruby');
+          ruby.append(document.createTextNode(segment.text));
+          if (segment.reading && segment.reading !== segment.text) {
+            const reading = document.createElement('rt');
+            reading.textContent = segment.reading;
+            ruby.append(reading);
+          }
+          jpDisplay.append(ruby);
+        });
+      } else {
+        jpDisplay.textContent = currentQuestion.kana;
+      }
+      document.getElementById('kanji-sub').textContent = currentQuestion.kanji ? currentQuestion.kanji : '';
+      
+      const hintElem = document.getElementById('hint');
+      hintElem.textContent = `Meaning: ${currentQuestion.meaning}`;
+      hintElem.classList.remove('visible');
+
+      const expectedAnswer = getExpectedDisplayAnswer(currentQuestion);
+      const input = document.getElementById('answer-input');
+      input.placeholder = sentenceAnswerMode === 'translation'
+        ? 'Type the English meaning...'
+        : 'Type romaji or hiragana...';
+      
+      const fb = document.getElementById('feedback');
+      fb.textContent = "";
+      fb.className = "feedback";
+      
+      document.getElementById('next-btn').style.display = "none";
+
+      const grid = document.getElementById('options');
+      const inputContainer = document.getElementById('type-container');
+
+      if (currentMode === 'choice') {
+        grid.style.display = 'grid';
+        inputContainer.style.display = 'none';
+
+        let wrongChoices = vocabularyList
+          .filter(item => item.kind === currentQuestion.kind)
+          .map(item => getExpectedDisplayAnswer(item))
+          .filter(answer => answer !== expectedAnswer)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3)
+
+        let options = [expectedAnswer, ...wrongChoices].sort(() => Math.random() - 0.5);
+
+        grid.innerHTML = '';
+        options.forEach(opt => {
+          const btn = document.createElement('button');
+          btn.className = 'opt-btn';
+          btn.textContent = opt;
+          btn.onclick = () => validateAnswer(opt, btn);
+          grid.appendChild(btn);
+        });
+      } else {
+        grid.style.display = 'none';
+        inputContainer.style.display = 'flex';
+        input.value = '';
+        input.disabled = false;
+        document.getElementById('submit-input-btn').disabled = false;
+        input.focus();
+      }
+    }
+
+    function submitTypedAnswer() {
+      const input = document.getElementById('answer-input');
+      const val = input.value.trim().toLowerCase();
+      if (!val) return;
+
+      const answer = sentenceAnswerMode === 'translation'
+        ? val
+        : wanakana.toRomaji(val);
+      validateAnswer(answer, null);
+    }
+
+    function validateAnswer(selected, button) {
+      const fb = document.getElementById('feedback');
+      document.getElementById('hint').classList.add('visible');
+      const expectedAnswer = getExpectedValidationAnswer(currentQuestion);
+      const normalizedSelected = sentenceAnswerMode === 'translation'
+        ? selected.toLowerCase()
+        : selected;
+      const expectedDisplayAnswer = getExpectedDisplayAnswer(currentQuestion);
+      const isCorrect = normalizedSelected === expectedAnswer;
+
+      answerHistory.unshift({
+        prompt: currentQuestion.kana,
+        answer: normalizedSelected,
+        correctAnswer: expectedDisplayAnswer,
+        meaning: currentQuestion.meaning,
+        isCorrect
+      });
+      renderHistory();
+
+      if (currentMode === 'choice') {
+        document.querySelectorAll('.opt-btn').forEach(b => b.disabled = true);
+      } else {
+        document.getElementById('answer-input').disabled = true;
+        document.getElementById('submit-input-btn').disabled = true;
+      }
+
+      if (isCorrect) {
+        if (button) button.classList.add('correct');
+        fb.textContent = "Correct! (正解)";
+        fb.classList.add('correct');
+        score += 10;
+        streak += 1;
+      } else {
+        if (button) button.classList.add('incorrect');
+        fb.textContent = `Incorrect! Correct: ${expectedDisplayAnswer}`;
+        fb.classList.add('incorrect');
+        streak = 0;
+
+        if (currentMode === 'choice') {
+          document.querySelectorAll('.opt-btn').forEach(b => {
+            if (b.textContent === expectedDisplayAnswer) b.classList.add('correct');
+          });
+        }
+      }
+
+      document.getElementById('score').textContent = score;
+      document.getElementById('streak').textContent = streak;
+      document.getElementById('next-btn').style.display = "block";
+    }
+
+    function renderHistory() {
+      const historyList = document.getElementById('history-list');
+      historyList.innerHTML = '';
+
+      answerHistory.forEach(item => {
+        const entry = document.createElement('div');
+        entry.className = `history-item ${item.isCorrect ? 'correct' : 'incorrect'}`;
+
+        const prompt = document.createElement('div');
+        prompt.className = 'history-prompt';
+        prompt.textContent = `${item.isCorrect ? 'Correct' : 'Incorrect'}: ${item.prompt}`;
+
+        const detail = document.createElement('div');
+        detail.className = 'history-detail';
+        detail.textContent = item.isCorrect
+          ? `${item.answer} · ${item.meaning}`
+          : `You: ${item.answer} · Correct: ${item.correctAnswer} · ${item.meaning}`;
+
+        entry.append(prompt, detail);
+        historyList.appendChild(entry);
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (document.getElementById('next-btn').style.display === 'block') {
+          loadNextQuestion();
+        } else if (currentMode === 'type') {
+          submitTypedAnswer();
+        }
+      }
+    });
+
+    loadVocabularyDatabase();
+  </script>
+</body>
+</html>
