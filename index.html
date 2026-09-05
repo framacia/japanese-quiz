@@ -504,6 +504,14 @@
       return item.furigana.map(segment => segment.reading || segment.text).join('');
     }
 
+    function formatRomaji(text) {
+      return text
+        .replace(/\s*([,，、])/g, '$1 ')
+        .replace(/\s*([.!?。！？])/g, '$1 ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
     function hasKanji(item) {
       const displayText = Array.isArray(item.furigana)
         ? item.furigana.map(segment => segment.text).join('')
@@ -514,14 +522,14 @@
     function getExpectedDisplayAnswer(item) {
       if (sentenceAnswerMode === 'translation') return item.meaning;
       return item.kind === 'sentence'
-        ? wanakana.toRomaji(getSentenceReading(item))
+        ? formatRomaji(wanakana.toRomaji(getSentenceReading(item)))
         : item.romaji;
     }
 
     function getExpectedValidationAnswer(item) {
       const displayAnswer = getExpectedDisplayAnswer(item);
       return sentenceAnswerMode === 'reading'
-        ? wanakana.toRomaji(displayAnswer)
+        ? wanakana.toRomaji(displayAnswer).replace(/\s+/g, '')
         : displayAnswer.toLowerCase();
     }
 
@@ -547,7 +555,23 @@
       return longestLength ? 1 - previous[second.length] / longestLength : 1;
     }
 
-    function answerSimilarity(correctAnswer, candidateAnswer) {
+    function readingKey(answer) {
+      return answer.toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function prefixSimilarity(first, second) {
+      const firstKey = readingKey(first);
+      const secondKey = readingKey(second);
+      let prefixLength = 0;
+      while (prefixLength < firstKey.length
+        && prefixLength < secondKey.length
+        && firstKey[prefixLength] === secondKey[prefixLength]) {
+        prefixLength += 1;
+      }
+      return prefixLength / Math.max(firstKey.length, secondKey.length, 1);
+    }
+
+    function answerSimilarity(correctAnswer, candidateAnswer, prioritizePrefix = false) {
       const correct = normalizeAnswer(correctAnswer);
       const candidate = normalizeAnswer(candidateAnswer);
       const correctWords = new Set(correct.split(' ').filter(Boolean));
@@ -556,6 +580,14 @@
       const totalWords = new Set([...correctWords, ...candidateWords]).size;
       const wordSimilarity = totalWords ? sharedWords / totalWords : 0;
       const lengthSimilarity = 1 - Math.min(1, Math.abs(correct.length - candidate.length) / Math.max(correct.length, candidate.length, 1));
+      const prefixScore = prefixSimilarity(correctAnswer, candidateAnswer);
+
+      if (prioritizePrefix) {
+        return editSimilarity(correct, candidate) * 0.35
+          + lengthSimilarity * 0.2
+          + wordSimilarity * 0.1
+          + prefixScore * 0.35;
+      }
 
       return editSimilarity(correct, candidate) * 0.55
         + lengthSimilarity * 0.25
@@ -563,6 +595,7 @@
     }
 
     function getSimilarWrongChoices(expectedAnswer) {
+      const prioritizePrefix = sentenceAnswerMode === 'reading';
       const candidates = vocabularyList
         .filter(item => item.kind === currentQuestion.kind)
         .map(item => getExpectedDisplayAnswer(item))
@@ -570,11 +603,15 @@
         .filter((answer, index, answers) => answers.indexOf(answer) === index)
         .map(answer => ({
           answer,
-          similarity: answerSimilarity(expectedAnswer, answer)
+          similarity: answerSimilarity(expectedAnswer, answer, prioritizePrefix)
         }))
         .sort((first, second) => second.similarity - first.similarity);
 
-      const strongestCandidates = candidates.slice(0, 3);
+      const expectedStart = readingKey(expectedAnswer)[0];
+      const sameStartCandidates = prioritizePrefix
+        ? candidates.filter(candidate => readingKey(candidate.answer)[0] === expectedStart)
+        : candidates;
+      const strongestCandidates = (sameStartCandidates.length >= 3 ? sameStartCandidates : candidates).slice(0, 3);
       return strongestCandidates
         .sort(() => Math.random() - 0.5)
         .slice(0, 3)
