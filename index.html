@@ -581,17 +581,29 @@
 
     const defaultAccent = '#38bdf8';
 
-    const grammarTokenizerEnabled = false;
+    const grammarTokenizerEnabled = true;
+    let grammarTokenizerPromise = null;
 
     function initializeGrammarTokenizer() {
+      if (grammarTokenizer) return Promise.resolve(grammarTokenizer);
+      if (grammarTokenizerPromise) return grammarTokenizerPromise;
       if (!grammarTokenizerEnabled) return Promise.resolve(null);
       if (!window.kuromoji) return Promise.resolve(null);
-      return new Promise(resolve => {
+      grammarTokenizerPromise = new Promise(resolve => {
+        let settled = false;
+        const finish = tokenizer => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          resolve(tokenizer);
+        };
+        const timeout = setTimeout(() => finish(null), 7000);
         kuromoji.builder({ dicPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' }).build((error, tokenizer) => {
-          if (!error) grammarTokenizer = tokenizer;
-          resolve(grammarTokenizer);
+          if (!error && tokenizer) grammarTokenizer = tokenizer;
+          finish(grammarTokenizer);
         });
       });
+      return grammarTokenizerPromise;
     }
 
     function applyAccentColor(color, save = true) {
@@ -1327,6 +1339,14 @@
       if (currentQuestion.kind === 'sentence' && grammarColourMode === 'after') {
         document.getElementById('jp').classList.add('grammar-colours-active');
       }
+      if (currentQuestion.kind === 'sentence' && !grammarTokenizer) {
+        const answeredQuestion = currentQuestion;
+        initializeGrammarTokenizer().then(() => {
+          if (grammarTokenizer && currentQuestion === answeredQuestion) {
+            renderGrammarAnalysis(answeredQuestion);
+          }
+        });
+      }
     }
 
     function renderHistory() {
@@ -1369,9 +1389,6 @@
     initializeQuizSettings();
     updateGrammarColourVisibility();
     setGrammarColourMode(grammarColourMode === 'before' || grammarColourMode === 'after' ? grammarColourMode : 'off');
-    initializeGrammarTokenizer().then(() => {
-      if (currentQuestion && currentQuestion.kind === 'sentence') loadNextQuestion(true);
-    });
     loadVocabularyDatabase();
   </script>
 </body>
