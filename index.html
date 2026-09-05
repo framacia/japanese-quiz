@@ -880,15 +880,48 @@
       return 'Noun';
     }
 
+    const grammarTokenGlosses = {
+      'は': 'topic marker; as for',
+      'が': 'subject or focus marker',
+      'を': 'direct-object marker',
+      'で': 'place or means marker; by, at, or with',
+      'へ': 'direction marker; to, toward',
+      'に': 'destination, time, target, or location marker',
+      'の': 'possessive or descriptive linker; of',
+      'と': 'companion or quotation marker; with, and',
+      'も': 'also, too marker',
+      'から': 'starting point marker; from',
+      'まで': 'limit marker; until, up to',
+      'か': 'question marker',
+      'ます': 'polite verb ending',
+      'です': 'copula; is, am, are',
+      'だ': 'plain copula; is, am, are',
+      'ない': 'not; negative auxiliary',
+      'する': 'to do',
+      '日本語': 'Japanese language',
+      'にほんご': 'Japanese language',
+      '毎日': 'every day',
+      'まいにち': 'every day',
+      '勉強': 'study',
+      'べんきょう': 'study',
+      '難しい': 'difficult',
+      'むずかしい': 'difficult'
+    };
+
     function getTokenMeaning(token) {
-      if (token.pos === '助詞' || token.pos === '助動詞' || token.pos === '記号') return '';
       const reading = token.reading ? wanakana.toHiragana(token.reading) : '';
+      const grammaticalGloss = grammarTokenGlosses[token.basic_form]
+        || grammarTokenGlosses[token.surface_form]
+        || grammarTokenGlosses[reading];
+      if (grammaticalGloss && (token.pos === '助詞' || token.pos === '助動詞' || token.pos === '記号')) {
+        return grammaticalGloss;
+      }
       const wordItems = vocabularyList.filter(item => item.kind !== 'sentence');
       const exactBasicMatch = wordItems.find(item => item.kanji && item.kanji === token.basic_form);
       if (exactBasicMatch) return exactBasicMatch.meaning;
       const exactKanaMatch = wordItems.find(item => item.kana === reading);
       const match = exactKanaMatch || wordItems.find(item => item.kanji && item.kanji === token.surface_form);
-      return match ? match.meaning : '';
+      return match ? match.meaning : (grammaticalGloss || '');
     }
 
     function getGrammarRelationship(token, tokens, index) {
@@ -925,18 +958,25 @@
     }
 
     function getGrammarExplanation(token, tokens, index) {
-      if (token.pos === '記号') return 'Punctuation.';
       const meaning = getTokenMeaning(token);
-      const meaningText = meaning ? `Meaning: ${meaning}. ` : '';
+      const fallbackMeaning = token.pos === '記号'
+        ? 'punctuation; it marks a pause or the end of the sentence'
+        : token.pos === '助詞'
+          ? 'grammatical particle; its exact nuance depends on context'
+          : token.pos === '助動詞'
+            ? 'grammatical auxiliary; it adds tense, politeness, or sentence-predicate information'
+            : 'content word; use the sentence translation to understand its meaning here';
+      const meaningText = `Meaning: ${meaning || fallbackMeaning}. `;
       const dictionaryText = token.basic_form && token.basic_form !== '*'
         ? `Dictionary form: ${token.basic_form}. `
         : '';
       const conjugationText = token.conjugated_form && token.conjugated_form !== '*'
         ? `Conjugation: ${token.conjugated_form}. `
         : '';
-      if (token.pos === '助詞') return `${meaningText}${getGrammarRelationship(token, tokens, index)}`;
-      if (token.pos === '助動詞' && token.basic_form === 'ます') return 'Meaning: polite verb ending. It attaches to the preceding verb to make that action polite.';
-      if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) return 'Meaning: copula (“is/am/are”). It links the preceding description or noun to the sentence predicate.';
+      if (token.pos === '記号') return meaningText.trim();
+      if (token.pos === '助詞') return `${meaningText}${dictionaryText}${getGrammarRelationship(token, tokens, index)}`;
+      if (token.pos === '助動詞' && token.basic_form === 'ます') return `${meaningText}${dictionaryText}${conjugationText}It attaches to the preceding verb to make that action polite.`;
+      if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) return `${meaningText}${dictionaryText}${conjugationText}It links the preceding description or noun to the sentence predicate.`;
       return `${meaningText}${dictionaryText}${conjugationText}${getGrammarRelationship(token, tokens, index)}`.trim();
     }
 
@@ -984,12 +1024,30 @@
 
     function renderMorphologicalSentence(item, display) {
       const tokens = grammarTokenizer.tokenize(item.kanji || item.kana);
+      const sourceReading = item.kana || '';
+      const normalizedSourceReading = wanakana.toHiragana(sourceReading);
+      let sourceCursor = 0;
       tokens.forEach((token, index) => {
         const isRedundantQuestionMark = /^[？?]$/.test(token.surface_form)
           && index > 0
           && tokens[index - 1].surface_form === 'か';
         if (isRedundantQuestionMark) return;
-        const reading = token.reading ? wanakana.toHiragana(token.reading) : token.surface_form;
+        const tokenReading = token.reading && token.reading !== '*'
+          ? token.reading
+          : token.surface_form;
+        const normalizedTokenReading = wanakana.toHiragana(tokenReading);
+        const sourceIndex = currentScript === 'all' && normalizedTokenReading
+          ? normalizedSourceReading.indexOf(normalizedTokenReading, sourceCursor)
+          : -1;
+        let reading = tokenReading;
+        if (sourceIndex >= 0) {
+          reading = sourceReading.slice(sourceIndex, sourceIndex + normalizedTokenReading.length);
+          sourceCursor = sourceIndex + normalizedTokenReading.length;
+        } else if (currentScript === 'hiragana') {
+          reading = wanakana.toHiragana(tokenReading);
+        } else if (currentScript === 'katakana') {
+          reading = wanakana.toKatakana(tokenReading);
+        }
         display.append(renderGrammarSegment({
           text: reading,
           reading,
@@ -1098,10 +1156,9 @@
         : item.kind !== 'sentence');
       const scriptQuestions = contentQuestions.filter(item => {
         const hasKatakana = /[\u30A0-\u30FF]/.test(item.kana);
-        const isEasySentence = item.kind !== 'sentence' || !hasKanji(item);
         return currentScript === 'all'
           || (currentScript === 'katakana' && hasKatakana)
-          || (currentScript === 'hiragana' && !hasKatakana && isEasySentence);
+          || (currentScript === 'hiragana' && !hasKatakana);
       });
       if (!scriptQuestions.length) return;
 
