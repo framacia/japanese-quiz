@@ -6,7 +6,6 @@
   <title>JLPT Japanese Quiz</title>
   
   <script src="https://cdn.jsdelivr.net/npm/wanakana@5.3.1/wanakana.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js"></script>
   <script src="n5-vocabulary-database.js"></script>
 
   <style>
@@ -583,27 +582,62 @@
 
     const grammarTokenizerEnabled = true;
     let grammarTokenizerPromise = null;
+    let grammarWorker = null;
+    let grammarRequestId = 0;
+    const grammarTokenRequests = new Map();
+    const grammarTokensByItem = new WeakMap();
 
     function initializeGrammarTokenizer() {
-      if (grammarTokenizer) return Promise.resolve(grammarTokenizer);
       if (grammarTokenizerPromise) return grammarTokenizerPromise;
       if (!grammarTokenizerEnabled) return Promise.resolve(null);
-      if (!window.kuromoji) return Promise.resolve(null);
       grammarTokenizerPromise = new Promise(resolve => {
         let settled = false;
-        const finish = tokenizer => {
+        const finish = ready => {
           if (settled) return;
           settled = true;
           clearTimeout(timeout);
-          resolve(tokenizer);
+          resolve(ready);
         };
-        const timeout = setTimeout(() => finish(null), 7000);
-        kuromoji.builder({ dicPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' }).build((error, tokenizer) => {
-          if (!error && tokenizer) grammarTokenizer = tokenizer;
-          finish(grammarTokenizer);
-        });
+        const timeout = setTimeout(() => finish(false), 10000);
+        if (!window.Worker) {
+          finish(false);
+          return;
+        }
+        grammarWorker = new Worker('grammar-tokenizer-worker.js');
+        grammarWorker.onmessage = event => {
+          if (event.data.type === 'ready') finish(true);
+          if (event.data.type === 'tokens') {
+            const request = grammarTokenRequests.get(event.data.requestId);
+            if (!request) return;
+            grammarTokenRequests.delete(event.data.requestId);
+            request.resolve(event.data.tokens);
+          }
+          if (event.data.type === 'error') {
+            finish(false);
+            grammarTokenRequests.forEach(request => request.resolve(null));
+            grammarTokenRequests.clear();
+          }
+        };
+        grammarWorker.onerror = () => finish(false);
+        grammarWorker.postMessage({ type: 'initialize' });
       });
       return grammarTokenizerPromise;
+    }
+
+    function tokenizeGrammar(item) {
+      const cachedTokens = grammarTokensByItem.get(item);
+      if (cachedTokens) return Promise.resolve(cachedTokens);
+      return initializeGrammarTokenizer().then(ready => {
+        if (!ready || !grammarWorker) return null;
+        return new Promise(resolve => {
+          const requestId = grammarRequestId++;
+          grammarTokenRequests.set(requestId, { resolve });
+          grammarWorker.postMessage({ type: 'tokenize', requestId, text: item.kanji || item.kana });
+        }).then(tokens => {
+          if (tokens) grammarTokensByItem.set(item, tokens);
+          return tokens;
+        });
+      });
     }
 
     function applyAccentColor(color, save = true) {
@@ -1015,12 +1049,12 @@
       const analysis = document.getElementById('grammar-analysis');
       const list = document.getElementById('grammar-analysis-list');
       list.replaceChildren();
-      if (!grammarTokenizer || item.kind !== 'sentence') {
+      const tokens = grammarTokensByItem.get(item);
+      if (!tokens || item.kind !== 'sentence') {
         analysis.classList.remove('visible');
         return;
       }
 
-      const tokens = grammarTokenizer.tokenize(item.kanji || item.kana);
       tokens.forEach((token, index) => {
         if (/^[？?]$/.test(token.surface_form) && index > 0 && tokens[index - 1].surface_form === 'か') return;
         const role = classifyMorphologyToken(token);
@@ -1053,8 +1087,7 @@
       analysis.classList.add('visible');
     }
 
-    function renderMorphologicalSentence(item, display) {
-      const tokens = grammarTokenizer.tokenize(item.kanji || item.kana);
+    function renderMorphologicalSentence(item, display, tokens) {
       const sourceReading = item.kana || '';
       const normalizedSourceReading = wanakana.toHiragana(sourceReading);
       let sourceCursor = 0;
@@ -1208,8 +1241,9 @@
       jpDisplay.classList.toggle('sentence', currentQuestion.kind === 'sentence');
       jpDisplay.replaceChildren();
       if (currentQuestion.kind === 'sentence' && Array.isArray(currentQuestion.furigana)) {
-        if (grammarTokenizer) {
-          renderMorphologicalSentence(currentQuestion, jpDisplay);
+        const tokens = grammarTokensByItem.get(currentQuestion);
+        if (tokens) {
+          renderMorphologicalSentence(currentQuestion, jpDisplay, tokens);
         } else {
           currentQuestion.furigana.forEach(segment => {
             splitGrammarSegment(segment).forEach(part => {
@@ -1220,7 +1254,14 @@
       } else {
         jpDisplay.textContent = currentQuestion.kana;
       }
-      jpDisplay.classList.toggle('grammar-colours-active', currentQuestion.kind === 'sentence' && shouldShowGrammarColours());
+      jpDisplay.classList.toggle('grammar-colours-active', currentQuestion.kind === 'sentence'
+        && grammarTokensByItem.has(currentQuestion) && shouldShowGrammarColours());
+      if (currentQuestion.kind === 'sentence' && !grammarTokensByItem.has(currentQuestion)) {
+        const displayedQuestion = currentQuestion;
+        tokenizeGrammar(displayedQuestion).then(tokens => {
+          if (tokens && currentQuestion === displayedQuestion) loadNextQuestion(true);
+        });
+      }
       document.getElementById('kanji-sub').textContent = currentQuestion.kanji ? currentQuestion.kanji : '';
       
       const hintElem = document.getElementById('hint');
@@ -1338,14 +1379,6 @@
       renderGrammarAnalysis(currentQuestion);
       if (currentQuestion.kind === 'sentence' && grammarColourMode === 'after') {
         document.getElementById('jp').classList.add('grammar-colours-active');
-      }
-      if (currentQuestion.kind === 'sentence' && !grammarTokenizer) {
-        const answeredQuestion = currentQuestion;
-        initializeGrammarTokenizer().then(() => {
-          if (grammarTokenizer && currentQuestion === answeredQuestion) {
-            renderGrammarAnalysis(answeredQuestion);
-          }
-        });
       }
     }
 
