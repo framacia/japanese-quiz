@@ -587,6 +587,11 @@
     const grammarTokenRequests = new Map();
     const grammarTokensByItem = new WeakMap();
 
+    function reportGrammarTokenizerError(message) {
+      console.error('Kuromoji grammar tokenizer:', message);
+      document.getElementById('data-status').textContent = `Grammar tokenizer unavailable: ${message}`;
+    }
+
     function initializeGrammarTokenizer() {
       if (grammarTokenizerPromise) return grammarTokenizerPromise;
       if (!grammarTokenizerEnabled) return Promise.resolve(null);
@@ -598,12 +603,22 @@
           clearTimeout(timeout);
           resolve(ready);
         };
-        const timeout = setTimeout(() => finish(false), 10000);
+        const timeout = setTimeout(() => {
+          reportGrammarTokenizerError('loading timed out');
+          finish(false);
+        }, 10000);
         if (!window.Worker) {
+          reportGrammarTokenizerError('Web Workers are not supported by this browser');
           finish(false);
           return;
         }
-        grammarWorker = new Worker('grammar-tokenizer-worker.js');
+        try {
+          grammarWorker = new Worker('grammar-tokenizer-worker.js');
+        } catch (error) {
+          reportGrammarTokenizerError(error.message);
+          finish(false);
+          return;
+        }
         grammarWorker.onmessage = event => {
           if (event.data.type === 'ready') finish(true);
           if (event.data.type === 'tokens') {
@@ -613,12 +628,16 @@
             request.resolve(event.data.tokens);
           }
           if (event.data.type === 'error') {
+            reportGrammarTokenizerError(event.data.message);
             finish(false);
             grammarTokenRequests.forEach(request => request.resolve(null));
             grammarTokenRequests.clear();
           }
         };
-        grammarWorker.onerror = () => finish(false);
+        grammarWorker.onerror = event => {
+          reportGrammarTokenizerError(event.message || 'worker failed to start');
+          finish(false);
+        };
         grammarWorker.postMessage({ type: 'initialize' });
       });
       return grammarTokenizerPromise;

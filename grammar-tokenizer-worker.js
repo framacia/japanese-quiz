@@ -1,12 +1,5 @@
-const scriptUrls = [
-  'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js',
-  'https://unpkg.com/kuromoji@0.1.2/build/kuromoji.js'
-];
-
-const dictionaryUrls = [
-  'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/',
-  'https://unpkg.com/kuromoji@0.1.2/dict/'
-];
+const scriptUrl = 'vendor/kuromoji.js';
+const dictionaryUrl = 'vendor/dict/';
 
 let tokenizerPromise = null;
 
@@ -22,27 +15,9 @@ function loadTokenizer(dictionaryUrl) {
 async function initializeTokenizer() {
   if (tokenizerPromise) return tokenizerPromise;
   tokenizerPromise = (async () => {
-    let libraryLoaded = false;
-    for (const scriptUrl of scriptUrls) {
-      try {
-        importScripts(scriptUrl);
-        libraryLoaded = true;
-        break;
-      } catch {
-        // Try the next CDN.
-      }
-    }
-    if (!libraryLoaded || !self.kuromoji) throw new Error('Unable to load Kuromoji.');
-
-    let lastError;
-    for (const dictionaryUrl of dictionaryUrls) {
-      try {
-        return await loadTokenizer(dictionaryUrl);
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError || new Error('Unable to load the Kuromoji dictionary.');
+    importScripts(scriptUrl);
+    if (!self.kuromoji) throw new Error('Unable to load the local Kuromoji library.');
+    return loadTokenizer(dictionaryUrl);
   })();
   return tokenizerPromise;
 }
@@ -56,6 +31,6 @@ self.onmessage = async event => {
       self.postMessage({ type: 'tokens', requestId: event.data.requestId, tokens: tokenizer.tokenize(event.data.text) });
     }
   } catch (error) {
-    self.postMessage({ type: 'error', message: error.message });
+    self.postMessage({ type: 'error', message: error instanceof Error ? error.message : String(error) });
   }
 };
