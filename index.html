@@ -40,13 +40,21 @@
     }
 
     .app {
-      width: 100%;
-      max-width: 440px;
+      width: fit-content;
+      min-width: 440px;
+      max-width: 100%;
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 20px;
       padding: 24px;
       box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+
+    @media (max-width: 480px) {
+      .app {
+        width: 100%;
+        min-width: 0;
+      }
     }
 
     header {
@@ -208,7 +216,7 @@
 
     .grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 16px;
     }
@@ -223,6 +231,8 @@
       border-radius: 12px;
       cursor: pointer;
       transition: all 0.15s ease;
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .opt-btn.correct {
@@ -494,6 +504,13 @@
       return item.furigana.map(segment => segment.reading || segment.text).join('');
     }
 
+    function hasKanji(item) {
+      const displayText = Array.isArray(item.furigana)
+        ? item.furigana.map(segment => segment.text).join('')
+        : item.kana;
+      return /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(displayText);
+    }
+
     function getExpectedDisplayAnswer(item) {
       if (sentenceAnswerMode === 'translation') return item.meaning;
       return item.kind === 'sentence'
@@ -572,9 +589,10 @@
         : item.kind !== 'sentence');
       const scriptQuestions = contentQuestions.filter(item => {
         const hasKatakana = /[\u30A0-\u30FF]/.test(item.kana);
+        const isEasySentence = item.kind !== 'sentence' || !hasKanji(item);
         return currentScript === 'all'
           || (currentScript === 'katakana' && hasKatakana)
-          || (currentScript === 'hiragana' && !hasKatakana);
+          || (currentScript === 'hiragana' && !hasKatakana && isEasySentence);
       });
       if (!scriptQuestions.length) return;
 
