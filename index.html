@@ -41,8 +41,7 @@
     }
 
     .app {
-      width: fit-content;
-      min-width: 440px;
+      width: min(620px, 100%);
       max-width: 100%;
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -582,7 +581,10 @@
 
     const defaultAccent = '#38bdf8';
 
+    const grammarTokenizerEnabled = false;
+
     function initializeGrammarTokenizer() {
+      if (!grammarTokenizerEnabled) return Promise.resolve(null);
       if (!window.kuromoji) return Promise.resolve(null);
       return new Promise(resolve => {
         kuromoji.builder({ dicPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' }).build((error, tokenizer) => {
