@@ -4,7 +4,7 @@ A small offline-friendly Japanese study quiz for JLPT N5 vocabulary and example 
 
 ## Run it
 
-Open [`quiz.html`](quiz.html) directly in a browser. No build step or local server is required. An internet connection is only needed to load the Wanakana romaji conversion library from jsDelivr.
+Open [`quiz.html`](quiz.html) directly in a browser. No build step or local server is required. An internet connection is needed to load the Wanakana romaji conversion library and Kuromoji Japanese morphology dictionary from jsDelivr.
 
 ## Features
 
@@ -13,6 +13,9 @@ Open [`quiz.html`](quiz.html) directly in a browser. No build step or local serv
 - Hiragana, Katakana, and All filters
 - Reading and Translation answer modes
 - Customizable accent colour with a saved preference
+- Optional noun, particle, verb, adjective, and auxiliary colour coding for sentences, shown before or after answering
+- Kuromoji-based Japanese morphological analysis for sentence grammar colouring, with a heuristic fallback if the analyser is unavailable
+- Post-answer grammar analysis showing each token's reading, role, dictionary form, conjugation, and learner-focused explanation
 - Furigana displayed above kanji in sentences
 - Romaji answers for reading questions
 - Score, streak, question count, and answer history

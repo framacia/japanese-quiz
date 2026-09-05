@@ -6,6 +6,7 @@
   <title>JLPT Japanese Quiz</title>
   
   <script src="https://cdn.jsdelivr.net/npm/wanakana@5.3.1/wanakana.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js"></script>
   <script src="n5-vocabulary-database.js"></script>
 
   <style>
@@ -183,6 +184,59 @@
       line-height: 1;
     }
 
+    .grammar-colour-toggle {
+      display: none;
+    }
+
+    .grammar-colour-toggle.visible {
+      display: flex;
+    }
+
+    .jp-display.grammar-colours-active .grammar-part {
+      border-radius: 4px;
+      padding: 0 2px;
+    }
+
+    .jp-display.grammar-colours-active .grammar-part.noun { color: #fbbf24; }
+    .jp-display.grammar-colours-active .grammar-part.particle { color: #c084fc; }
+    .jp-display.grammar-colours-active .grammar-part.verb { color: #4ade80; }
+    .jp-display.grammar-colours-active .grammar-part.adjective { color: #fb923c; }
+    .jp-display.grammar-colours-active .grammar-part.auxiliary { color: #60a5fa; }
+    .jp-display.grammar-colours-active .grammar-part.punctuation { color: var(--text-dim); }
+
+    .grammar-legend {
+      display: none;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px 10px;
+      margin-top: 6px;
+      color: var(--text-dim);
+      font-size: 0.72rem;
+    }
+
+    .grammar-legend.visible {
+      display: flex;
+    }
+
+    .grammar-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .grammar-legend-swatch {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+    }
+
+    .grammar-legend-swatch.noun { background: #fbbf24; }
+    .grammar-legend-swatch.particle { background: #c084fc; }
+    .grammar-legend-swatch.verb { background: #4ade80; }
+    .grammar-legend-swatch.adjective { background: #fb923c; }
+    .grammar-legend-swatch.auxiliary { background: #60a5fa; }
+    .grammar-legend-swatch.punctuation { background: var(--text-dim); }
+
     .kanji-sub {
       font-size: 1rem;
       color: var(--text-dim);
@@ -213,6 +267,72 @@
 
     .feedback.correct { color: var(--correct); }
     .feedback.incorrect { color: var(--incorrect); }
+
+    .grammar-analysis {
+      display: none;
+      width: 100%;
+      margin: 4px 0 16px;
+      text-align: left;
+    }
+
+    .grammar-analysis.visible {
+      display: block;
+    }
+
+    .grammar-analysis h2 {
+      color: var(--text);
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+    }
+
+    .grammar-analysis-intro {
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      margin-bottom: 8px;
+    }
+
+    .grammar-analysis-list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .grammar-analysis-row {
+      display: grid;
+      grid-template-columns: minmax(70px, 0.8fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr);
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      background: #0b0f19;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--text-dim);
+      border-radius: 8px;
+      font-size: 0.78rem;
+    }
+
+    .grammar-analysis-row.noun { border-left-color: #fbbf24; }
+    .grammar-analysis-row.particle { border-left-color: #c084fc; }
+    .grammar-analysis-row.verb { border-left-color: #4ade80; }
+    .grammar-analysis-row.adjective { border-left-color: #fb923c; }
+    .grammar-analysis-row.auxiliary { border-left-color: #60a5fa; }
+    .grammar-analysis-token { color: var(--text); font-size: 1rem; font-weight: 700; }
+    .grammar-analysis-reading,
+    .grammar-analysis-romaji,
+    .grammar-analysis-role { color: var(--text-dim); }
+    .grammar-analysis-reading { font-size: 0.75rem; }
+    .grammar-analysis-romaji { font-size: 0.75rem; }
+    .grammar-analysis-role { font-weight: 700; }
+    .grammar-analysis-explanation { color: var(--text); }
+
+    @media (max-width: 560px) {
+      .grammar-analysis-row {
+        grid-template-columns: minmax(55px, 0.8fr) minmax(70px, 1fr) minmax(70px, 1fr) minmax(80px, 1fr);
+      }
+
+      .grammar-analysis-explanation {
+        grid-column: 1 / -1;
+        color: var(--text-dim);
+      }
+    }
 
     .grid {
       display: grid;
@@ -363,6 +483,19 @@
         <button class="mode-btn active" id="btn-reading-answer" onclick="setSentenceAnswerMode('reading')">Reading</button>
         <button class="mode-btn" id="btn-translation-answer" onclick="setSentenceAnswerMode('translation')">Translation</button>
       </div>
+      <div class="mode-toggle content-toggle grammar-colour-toggle" id="grammar-colour-toggle">
+        <button class="mode-btn active" id="btn-grammar-off" onclick="setGrammarColourMode('off')">Plain</button>
+        <button class="mode-btn" id="btn-grammar-before" onclick="setGrammarColourMode('before')">Colours before answer</button>
+        <button class="mode-btn" id="btn-grammar-after" onclick="setGrammarColourMode('after')">Colours after answer</button>
+      </div>
+      <div class="grammar-legend" id="grammar-legend" aria-label="Grammar colour legend">
+        <span class="grammar-legend-item"><span class="grammar-legend-swatch noun"></span>Noun</span>
+        <span class="grammar-legend-item"><span class="grammar-legend-swatch particle"></span>Particle</span>
+        <span class="grammar-legend-item"><span class="grammar-legend-swatch verb"></span>Verb</span>
+        <span class="grammar-legend-item"><span class="grammar-legend-swatch adjective"></span>Adjective</span>
+        <span class="grammar-legend-item"><span class="grammar-legend-swatch auxiliary"></span>Auxiliary</span>
+        <span class="grammar-legend-item"><span class="grammar-legend-swatch punctuation"></span>Punctuation</span>
+      </div>
       <div class="appearance-controls">
         <label for="accent-picker">Accent</label>
         <input class="accent-picker" id="accent-picker" type="color" value="#38bdf8" title="Choose accent colour" aria-label="Choose accent colour">
@@ -384,6 +517,12 @@
 
     <div class="feedback" id="feedback"></div>
 
+    <section class="grammar-analysis" id="grammar-analysis" aria-labelledby="grammar-analysis-title">
+      <h2 id="grammar-analysis-title">Grammar analysis</h2>
+      <p class="grammar-analysis-intro">The sentence is split into morphology-backed grammar units.</p>
+      <div class="grammar-analysis-list" id="grammar-analysis-list"></div>
+    </section>
+
     <div class="grid" id="options"></div>
 
     <div class="input-container" id="type-container" style="display: none;">
@@ -403,17 +542,34 @@
   <script>
     let vocabularyList = [];
     let currentQuestion = null;
-    let currentMode = 'choice';
-    let currentContent = 'word';
-    let currentScript = 'hiragana';
-    let sentenceAnswerMode = 'reading';
+    const savedMode = localStorage.getItem('japanese-quiz-mode');
+    const savedContent = localStorage.getItem('japanese-quiz-content');
+    const savedScript = localStorage.getItem('japanese-quiz-script');
+    const savedAnswerMode = localStorage.getItem('japanese-quiz-answer-mode');
+    const savedGrammarColourMode = localStorage.getItem('japanese-quiz-grammar-colours');
+    let currentMode = ['choice', 'type'].includes(savedMode) ? savedMode : 'choice';
+    let currentContent = ['word', 'sentence'].includes(savedContent) ? savedContent : 'word';
+    let currentScript = ['hiragana', 'katakana', 'all'].includes(savedScript) ? savedScript : 'hiragana';
+    let sentenceAnswerMode = ['reading', 'translation'].includes(savedAnswerMode) ? savedAnswerMode : 'reading';
+    let grammarColourMode = ['off', 'before', 'after'].includes(savedGrammarColourMode) ? savedGrammarColourMode : 'off';
     let score = 0;
     let streak = 0;
     let questionCount = 0;
     let previousKana = '';
     let answerHistory = [];
+    let grammarTokenizer = null;
 
     const defaultAccent = '#38bdf8';
+
+    function initializeGrammarTokenizer() {
+      if (!window.kuromoji) return Promise.resolve(null);
+      return new Promise(resolve => {
+        kuromoji.builder({ dicPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' }).build((error, tokenizer) => {
+          if (!error) grammarTokenizer = tokenizer;
+          resolve(grammarTokenizer);
+        });
+      });
+    }
 
     function applyAccentColor(color, save = true) {
       const hex = color.toLowerCase();
@@ -470,28 +626,60 @@
 
     function setMode(mode) {
       currentMode = mode;
+      localStorage.setItem('japanese-quiz-mode', mode);
       document.getElementById('btn-quiz-mode').classList.toggle('active', mode === 'choice');
       document.getElementById('btn-type-mode').classList.toggle('active', mode === 'type');
-      loadNextQuestion();
+      loadNextQuestion(true);
     }
 
     function setContent(content) {
       currentContent = content;
+      localStorage.setItem('japanese-quiz-content', content);
       document.getElementById('btn-word-content').classList.toggle('active', content === 'word');
       document.getElementById('btn-sentence-content').classList.toggle('active', content === 'sentence');
+      updateGrammarColourVisibility();
       previousKana = '';
       loadNextQuestion();
     }
 
+    function updateGrammarColourVisibility() {
+      const isSentenceMode = currentContent === 'sentence';
+      document.getElementById('grammar-colour-toggle').classList.toggle('visible', isSentenceMode);
+      document.getElementById('grammar-legend').classList.toggle('visible', isSentenceMode);
+    }
+
+    function initializeQuizSettings() {
+      document.getElementById('btn-quiz-mode').classList.toggle('active', currentMode === 'choice');
+      document.getElementById('btn-type-mode').classList.toggle('active', currentMode === 'type');
+      document.getElementById('btn-word-content').classList.toggle('active', currentContent === 'word');
+      document.getElementById('btn-sentence-content').classList.toggle('active', currentContent === 'sentence');
+      document.getElementById('btn-hiragana-script').classList.toggle('active', currentScript === 'hiragana');
+      document.getElementById('btn-katakana-script').classList.toggle('active', currentScript === 'katakana');
+      document.getElementById('btn-all-script').classList.toggle('active', currentScript === 'all');
+      document.getElementById('btn-reading-answer').classList.toggle('active', sentenceAnswerMode === 'reading');
+      document.getElementById('btn-translation-answer').classList.toggle('active', sentenceAnswerMode === 'translation');
+    }
+
     function setSentenceAnswerMode(mode) {
       sentenceAnswerMode = mode;
+      localStorage.setItem('japanese-quiz-answer-mode', mode);
       document.getElementById('btn-reading-answer').classList.toggle('active', mode === 'reading');
       document.getElementById('btn-translation-answer').classList.toggle('active', mode === 'translation');
       loadNextQuestion(true);
     }
 
+    function setGrammarColourMode(mode) {
+      grammarColourMode = mode;
+      localStorage.setItem('japanese-quiz-grammar-colours', mode);
+      ['off', 'before', 'after'].forEach(option => {
+        document.getElementById(`btn-grammar-${option}`).classList.toggle('active', option === mode);
+      });
+      loadNextQuestion(true);
+    }
+
     function setScript(script) {
       currentScript = script;
+      localStorage.setItem('japanese-quiz-script', script);
       document.getElementById('btn-hiragana-script').classList.toggle('active', script === 'hiragana');
       document.getElementById('btn-katakana-script').classList.toggle('active', script === 'katakana');
       document.getElementById('btn-all-script').classList.toggle('active', script === 'all');
@@ -501,13 +689,26 @@
 
     function getSentenceReading(item) {
       if (!Array.isArray(item.furigana)) return wanakana.toHiragana(item.kana);
-      return item.furigana.map(segment => segment.reading || segment.text).join('');
+      const surfaceText = item.kanji || item.kana;
+      const hasParticleInKanjiSentence = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(surfaceText)
+        && surfaceText.includes('は');
+      return item.furigana.map(segment => {
+        const reading = segment.reading || segment.text;
+        const text = segment.text || '';
+        if (text.endsWith('は') && reading.endsWith('は')) {
+          return `${reading.slice(0, -1)}わ`;
+        }
+        if (hasParticleInKanjiSentence && reading.includes('は')) {
+          const particleIndex = reading.lastIndexOf('は');
+          return `${reading.slice(0, particleIndex)}わ${reading.slice(particleIndex + 1)}`;
+        }
+        return reading;
+      }).join('');
     }
 
     function formatRomaji(text) {
       return text
-        .replace(/\s*([,，、])/g, '$1 ')
-        .replace(/\s*([.!?。！？])/g, '$1 ')
+        .replace(/[,，、.!?。！？]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
     }
@@ -526,10 +727,245 @@
         : item.romaji;
     }
 
+    function classifyGrammarPart(text, reading, role) {
+      if (role) return role;
+      if (/^[、。！？,.!?]$/.test(text)) return 'punctuation';
+      if (/^(は|が|を|に|へ|で|と|の|も|や|から|まで|より|ね|よ|か|だけ|しか|ほど|くらい|ので|のに)$/.test(text)) return 'particle';
+      if (/^(する|します|した|しました|しない|しません|して|しよう)$/.test(reading)) return 'verb';
+      if (/^(だ|です)$/.test(reading)) return 'verb';
+      if (/^(ます|ました|ません|でした|ない|たい|ている|ています|てください)$/.test(reading)) return 'auxiliary';
+      if (/(くない|かった|くて)$/.test(reading)) return 'adjective';
+      if (/(ます|ました|ません|て|で|た|ない|る|う|く|ぐ|す|つ|ぬ|ぶ|む)$/.test(reading)) return 'verb';
+      return 'noun';
+    }
+
+    function isKnownGrammarWord(text) {
+      return text === 'わたし'
+        || text === 'にほんご'
+        || vocabularyList.some(item => item.kind !== 'sentence' && item.kana === text);
+    }
+
+    function findKnownGrammarPrefix(text) {
+      const particles = new Set(['は', 'が', 'を', 'に', 'へ', 'で', 'と', 'の', 'も', 'や', 'から', 'まで', 'より', 'ね', 'よ', 'か']);
+      const grammarTokens = new Set(['だ', 'です', 'する', 'します', 'した', 'しました', 'しない', 'しません', 'して', 'しよう', 'ます', 'ました', 'ません', 'でした', 'ない', 'たい', 'ている', 'ています', 'てください']);
+      const candidates = vocabularyList
+        .filter(item => item.kind !== 'sentence' && text.startsWith(item.kana))
+        .map(item => item.kana)
+        .filter(value => !particles.has(value) && !grammarTokens.has(value))
+        .filter((value, index, values) => values.indexOf(value) === index);
+      if (text.startsWith('わたし')) candidates.push('わたし');
+      if (text.startsWith('にほんご')) candidates.push('にほんご');
+      return candidates.sort((first, second) => second.length - first.length)[0] || '';
+    }
+
+    function splitGrammarSegment(segment) {
+      const text = segment.text || '';
+      const reading = segment.reading || text;
+      const punctuationMatch = text.match(/([、。！？,.!?])$/);
+      if (punctuationMatch && text.length > 1) {
+        const punctuation = punctuationMatch[1];
+        const coreText = text.slice(0, -punctuation.length);
+        const coreReading = reading.slice(0, -punctuation.length);
+        const coreParts = splitGrammarSegment({ text: coreText, reading: coreReading });
+        if ((punctuation === '？' || punctuation === '?') && coreText.endsWith('か')) return coreParts;
+        return [...coreParts, { text: punctuation, reading: punctuation }];
+      }
+      if (text === reading) {
+        const knownPrefix = findKnownGrammarPrefix(text);
+        if (knownPrefix && knownPrefix.length < text.length) {
+          return [
+            { text: knownPrefix, reading: knownPrefix, role: 'noun' },
+            ...splitGrammarSegment({ text: text.slice(knownPrefix.length), reading: reading.slice(knownPrefix.length) })
+          ];
+        }
+        const copulaQuestionMatch = text.match(/^(です|でした|だ)か$/);
+        if (copulaQuestionMatch) {
+          return [
+            { text: copulaQuestionMatch[1], reading: copulaQuestionMatch[1] },
+            { text: 'か', reading: 'か' }
+          ];
+        }
+        const suruVerbMatch = text.match(/^(.+)(しました|しません|します|しない|しよう|して|した|する)$/);
+        if (suruVerbMatch) {
+          return [
+            ...splitGrammarSegment({ text: suruVerbMatch[1], reading: suruVerbMatch[1], role: 'noun' }),
+            { text: suruVerbMatch[2], reading: suruVerbMatch[2] }
+          ];
+        }
+        const auxiliaryMatch = text.match(/^(.+)(でした|ました|ません|です|ます|だ)$/);
+        if (auxiliaryMatch) {
+          return [
+            ...splitGrammarSegment({ text: auxiliaryMatch[1], reading: auxiliaryMatch[1] }),
+            { text: auxiliaryMatch[2], reading: auxiliaryMatch[2] }
+          ];
+        }
+        const internalParticleMatch = text.match(/^(.+?)(は|が|を|に|へ|で|と|の|も|や)(.+)$/);
+        const hasKnownBoundary = internalParticleMatch
+          && vocabularyList.some(item => item.kind !== 'sentence' && item.kana === internalParticleMatch[1])
+          && vocabularyList.some(item => item.kind !== 'sentence' && item.kana === internalParticleMatch[3]);
+        if (hasKnownBoundary) {
+          return [
+            ...splitGrammarSegment({ text: internalParticleMatch[1], reading: internalParticleMatch[1] }),
+            { text: internalParticleMatch[2], reading: internalParticleMatch[2] },
+            ...splitGrammarSegment({ text: internalParticleMatch[3], reading: internalParticleMatch[3] })
+          ];
+        }
+      }
+      const particles = 'は|が|を|に|へ|で|と|の|も|や|から|まで|より|ね|よ|か';
+      const parts = [];
+      let remainingText = text;
+      let remainingReading = reading;
+      const leadingParticle = text !== reading
+        ? remainingText.match(new RegExp(`^(${particles})(.+)$`))
+        : (!isKnownGrammarWord(remainingText)
+          ? remainingText.match(new RegExp(`^(${particles})(.+)$`))
+          : null);
+      if (leadingParticle) {
+        parts.push({ text: leadingParticle[1], reading: remainingReading.slice(0, leadingParticle[1].length) });
+        remainingText = leadingParticle[2];
+        remainingReading = remainingReading.slice(leadingParticle[1].length);
+      }
+      const trailingParticle = remainingText.match(new RegExp(`^(.+)(${particles})$`));
+      if (trailingParticle) {
+        const particleReading = remainingReading.slice(-trailingParticle[2].length);
+        parts.push({ text: trailingParticle[1], reading: remainingReading.slice(0, -particleReading.length) });
+        parts.push({ text: trailingParticle[2], reading: particleReading });
+        return parts;
+      }
+      parts.push({ text: remainingText, reading: remainingReading, role: segment.role });
+      return parts;
+    }
+
+    function shouldShowGrammarColours() {
+      return grammarColourMode === 'before'
+        || (grammarColourMode === 'after' && document.getElementById('next-btn').style.display === 'block');
+    }
+
+    function renderGrammarSegment(segment) {
+      const ruby = document.createElement('ruby');
+      const part = document.createElement('span');
+      part.className = `grammar-part ${classifyGrammarPart(segment.text, segment.reading || segment.text, segment.role)}`;
+      part.append(document.createTextNode(segment.text));
+      ruby.append(part);
+      if (segment.reading && segment.reading !== segment.text) {
+        const reading = document.createElement('rt');
+        reading.textContent = segment.reading;
+        ruby.append(reading);
+      }
+      return ruby;
+    }
+
+    function classifyMorphologyToken(token) {
+      if (token.pos === '助詞') return 'particle';
+      if (token.pos === '動詞') return 'verb';
+      if (token.pos === '形容詞') return 'adjective';
+      if (token.pos === '助動詞') {
+        return /^(ます|です|だ)$/.test(token.basic_form) ? 'verb' : 'auxiliary';
+      }
+      if (/^[、。！？,.!?]$/.test(token.surface_form)) return 'punctuation';
+      return 'noun';
+    }
+
+    function getGrammarRoleLabel(token) {
+      if (token.pos === '助詞') return 'Particle';
+      if (token.pos === '動詞') return 'Verb';
+      if (token.pos === '形容詞') return 'Adjective';
+      if (token.pos === '助動詞' && /^(ます|です|だ)$/.test(token.basic_form)) return 'Verb ending';
+      if (token.pos === '助動詞') return 'Auxiliary';
+      if (token.pos === '記号') return 'Punctuation';
+      return 'Noun';
+    }
+
+    function getGrammarExplanation(token) {
+      if (token.pos === '助詞') {
+        const particleExplanations = {
+          'は': 'Often marks the topic of the sentence.',
+          'が': 'Often marks the subject or identifies something.',
+          'を': 'Often marks the direct object of an action.',
+          'で': 'Often marks where an action happens or the means used.',
+          'へ': 'Marks the direction of movement.',
+          'に': 'Often marks a destination, time, target, or location.',
+          'の': 'Links nouns, often showing possession or description.',
+          'と': 'Often means “with” or links quoted words.',
+          'も': 'Adds the meaning “also” or “too”.'
+        };
+        return particleExplanations[token.surface_form] || 'Shows a grammatical relationship; its exact meaning depends on context.';
+      }
+      if (token.pos === '動詞') {
+        if (token.basic_form === '*') return 'Action or state word.';
+        const conjugation = token.conjugated_form !== '*' ? ` Conjugation: ${token.conjugated_form}.` : '';
+        return `Action or state; dictionary form: ${token.basic_form}.${conjugation}`;
+      }
+      if (token.pos === '形容詞') return token.basic_form === '*' ? 'Describes a quality or state.' : `Describes a quality or state; dictionary form: ${token.basic_form}.`;
+      if (token.pos === '助動詞' && token.basic_form === 'ます') return 'Polite ending attached to a verb.';
+      if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) return 'Copula: links a noun or description to “is/am/are”.';
+      if (token.pos === '助動詞') return `Adds grammatical meaning; dictionary form: ${token.basic_form}.`;
+      if (token.pos === '記号') return 'Punctuation.';
+      return token.basic_form === '*' ? 'Names a person, place, thing, or idea.' : `Names a person, place, thing, or idea; dictionary form: ${token.basic_form}.`;
+    }
+
+    function renderGrammarAnalysis(item) {
+      const analysis = document.getElementById('grammar-analysis');
+      const list = document.getElementById('grammar-analysis-list');
+      list.replaceChildren();
+      if (!grammarTokenizer || item.kind !== 'sentence') {
+        analysis.classList.remove('visible');
+        return;
+      }
+
+      const tokens = grammarTokenizer.tokenize(item.kanji || item.kana);
+      tokens.forEach((token, index) => {
+        if (/^[？?]$/.test(token.surface_form) && index > 0 && tokens[index - 1].surface_form === 'か') return;
+        const role = classifyMorphologyToken(token);
+        const row = document.createElement('div');
+        row.className = `grammar-analysis-row ${role}`;
+
+        const tokenText = document.createElement('strong');
+        tokenText.className = 'grammar-analysis-token';
+        tokenText.textContent = token.surface_form;
+
+        const reading = document.createElement('span');
+        reading.className = 'grammar-analysis-reading';
+        reading.textContent = token.reading ? wanakana.toHiragana(token.reading) : '—';
+
+        const romaji = document.createElement('span');
+        romaji.className = 'grammar-analysis-romaji';
+        romaji.textContent = token.reading ? wanakana.toRomaji(token.reading) : '—';
+
+        const roleLabel = document.createElement('span');
+        roleLabel.className = 'grammar-analysis-role';
+        roleLabel.textContent = getGrammarRoleLabel(token);
+
+        const explanation = document.createElement('span');
+        explanation.className = 'grammar-analysis-explanation';
+        explanation.textContent = getGrammarExplanation(token);
+
+        row.append(tokenText, reading, romaji, roleLabel, explanation);
+        list.appendChild(row);
+      });
+      analysis.classList.add('visible');
+    }
+
+    function renderMorphologicalSentence(item, display) {
+      const tokens = grammarTokenizer.tokenize(item.kanji || item.kana);
+      tokens.forEach((token, index) => {
+        const isRedundantQuestionMark = /^[？?]$/.test(token.surface_form)
+          && index > 0
+          && tokens[index - 1].surface_form === 'か';
+        if (isRedundantQuestionMark) return;
+        const reading = token.reading ? wanakana.toHiragana(token.reading) : token.surface_form;
+        display.append(renderGrammarSegment({
+          text: reading,
+          reading,
+          role: classifyMorphologyToken(token)
+        }));
+      });
+    }
+
     function getExpectedValidationAnswer(item) {
       const displayAnswer = getExpectedDisplayAnswer(item);
       return sentenceAnswerMode === 'reading'
-        ? wanakana.toRomaji(displayAnswer).replace(/\s+/g, '')
+        ? readingKey(displayAnswer)
         : displayAnswer.toLowerCase();
     }
 
@@ -648,19 +1084,19 @@
       jpDisplay.classList.toggle('sentence', currentQuestion.kind === 'sentence');
       jpDisplay.replaceChildren();
       if (currentQuestion.kind === 'sentence' && Array.isArray(currentQuestion.furigana)) {
-        currentQuestion.furigana.forEach(segment => {
-          const ruby = document.createElement('ruby');
-          ruby.append(document.createTextNode(segment.text));
-          if (segment.reading && segment.reading !== segment.text) {
-            const reading = document.createElement('rt');
-            reading.textContent = segment.reading;
-            ruby.append(reading);
-          }
-          jpDisplay.append(ruby);
-        });
+        if (grammarTokenizer) {
+          renderMorphologicalSentence(currentQuestion, jpDisplay);
+        } else {
+          currentQuestion.furigana.forEach(segment => {
+            splitGrammarSegment(segment).forEach(part => {
+              jpDisplay.append(renderGrammarSegment(part));
+            });
+          });
+        }
       } else {
         jpDisplay.textContent = currentQuestion.kana;
       }
+      jpDisplay.classList.toggle('grammar-colours-active', currentQuestion.kind === 'sentence' && shouldShowGrammarColours());
       document.getElementById('kanji-sub').textContent = currentQuestion.kanji ? currentQuestion.kanji : '';
       
       const hintElem = document.getElementById('hint');
@@ -676,6 +1112,8 @@
       const fb = document.getElementById('feedback');
       fb.textContent = "";
       fb.className = "feedback";
+      document.getElementById('grammar-analysis').classList.remove('visible');
+      document.getElementById('grammar-analysis-list').replaceChildren();
       
       document.getElementById('next-btn').style.display = "none";
 
@@ -725,7 +1163,7 @@
       const expectedAnswer = getExpectedValidationAnswer(currentQuestion);
       const normalizedSelected = sentenceAnswerMode === 'translation'
         ? selected.toLowerCase()
-        : selected;
+        : readingKey(selected);
       const expectedDisplayAnswer = getExpectedDisplayAnswer(currentQuestion);
       const isCorrect = normalizedSelected === expectedAnswer;
 
@@ -767,6 +1205,10 @@
       document.getElementById('score').textContent = score;
       document.getElementById('streak').textContent = streak;
       document.getElementById('next-btn').style.display = "block";
+      renderGrammarAnalysis(currentQuestion);
+      if (currentQuestion.kind === 'sentence' && grammarColourMode === 'after') {
+        document.getElementById('jp').classList.add('grammar-colours-active');
+      }
     }
 
     function renderHistory() {
@@ -804,6 +1246,12 @@
     });
 
     initializeAccentColor();
+    initializeQuizSettings();
+    updateGrammarColourVisibility();
+    setGrammarColourMode(grammarColourMode === 'before' || grammarColourMode === 'after' ? grammarColourMode : 'off');
+    initializeGrammarTokenizer().then(() => {
+      if (currentQuestion && currentQuestion.kind === 'sentence') loadNextQuestion(true);
+    });
     loadVocabularyDatabase();
   </script>
 </body>
