@@ -271,7 +271,9 @@
     .grammar-analysis {
       display: none;
       width: 100%;
-      margin: 4px 0 16px;
+      margin: 20px 0 16px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
       text-align: left;
     }
 
@@ -448,6 +450,7 @@
 
     .history-item.correct { border-left-color: var(--correct); }
     .history-item.incorrect { border-left-color: var(--incorrect); }
+    .history-item.skipped { border-left-color: var(--text-dim); }
 
     .history-prompt {
       color: var(--text);
@@ -517,12 +520,6 @@
 
     <div class="feedback" id="feedback"></div>
 
-    <section class="grammar-analysis" id="grammar-analysis" aria-labelledby="grammar-analysis-title">
-      <h2 id="grammar-analysis-title">Grammar analysis</h2>
-      <p class="grammar-analysis-intro">The sentence is split into morphology-backed grammar units.</p>
-      <div class="grammar-analysis-list" id="grammar-analysis-list"></div>
-    </section>
-
     <div class="grid" id="options"></div>
 
     <div class="input-container" id="type-container" style="display: none;">
@@ -531,6 +528,13 @@
     </div>
 
     <button class="action-btn" id="next-btn" onclick="loadNextQuestion()">Next Question →</button>
+
+    <section class="grammar-analysis" id="grammar-analysis" aria-labelledby="grammar-analysis-title">
+      <h2 id="grammar-analysis-title">Grammar analysis</h2>
+      <p class="grammar-analysis-intro">The sentence is split into morphology-backed grammar units.</p>
+      <div class="grammar-analysis-list" id="grammar-analysis-list"></div>
+    </section>
+
     <div class="status-badge" id="data-status">Loading local N5 vocabulary...</div>
 
     <section class="history" aria-labelledby="history-title">
@@ -876,32 +880,64 @@
       return 'Noun';
     }
 
-    function getGrammarExplanation(token) {
+    function getTokenMeaning(token) {
+      if (token.pos === '助詞' || token.pos === '助動詞' || token.pos === '記号') return '';
+      const reading = token.reading ? wanakana.toHiragana(token.reading) : '';
+      const wordItems = vocabularyList.filter(item => item.kind !== 'sentence');
+      const exactBasicMatch = wordItems.find(item => item.kanji && item.kanji === token.basic_form);
+      if (exactBasicMatch) return exactBasicMatch.meaning;
+      const exactKanaMatch = wordItems.find(item => item.kana === reading);
+      const match = exactKanaMatch || wordItems.find(item => item.kanji && item.kanji === token.surface_form);
+      return match ? match.meaning : '';
+    }
+
+    function getGrammarRelationship(token, tokens, index) {
+      const nextToken = tokens[index + 1];
+      const previousToken = tokens[index - 1];
+      const nextParticle = nextToken && nextToken.pos === '助詞' ? nextToken.surface_form : '';
+      const particleRelationships = {
+        'は': 'sets this section as the sentence topic',
+        'が': 'marks this section as the subject or focus',
+        'を': 'marks this section as the direct object of the action',
+        'で': 'marks this section as the place or means of the action',
+        'へ': 'marks this section as the destination of movement',
+        'に': 'marks this section as a destination, time, target, or location',
+        'の': 'links this section to the following noun as a description or possession',
+        'と': 'links this section as a companion or quotation',
+        'も': 'adds the meaning “also” or “too” to this section'
+      };
+
       if (token.pos === '助詞') {
-        const particleExplanations = {
-          'は': 'Often marks the topic of the sentence.',
-          'が': 'Often marks the subject or identifies something.',
-          'を': 'Often marks the direct object of an action.',
-          'で': 'Often marks where an action happens or the means used.',
-          'へ': 'Marks the direction of movement.',
-          'に': 'Often marks a destination, time, target, or location.',
-          'の': 'Links nouns, often showing possession or description.',
-          'と': 'Often means “with” or links quoted words.',
-          'も': 'Adds the meaning “also” or “too”.'
-        };
-        return particleExplanations[token.surface_form] || 'Shows a grammatical relationship; its exact meaning depends on context.';
+        const relation = particleRelationships[token.surface_form];
+        return relation ? `It ${relation}.` : 'It connects this section to the rest of the sentence; its exact function depends on context.';
+      }
+      if (nextParticle && particleRelationships[nextParticle]) {
+        return `The following ${nextParticle} particle ${particleRelationships[nextParticle].replace('this section', 'it')}.`;
       }
       if (token.pos === '動詞') {
-        if (token.basic_form === '*') return 'Action or state word.';
-        const conjugation = token.conjugated_form !== '*' ? ` Conjugation: ${token.conjugated_form}.` : '';
-        return `Action or state; dictionary form: ${token.basic_form}.${conjugation}`;
+        if (nextToken && nextToken.pos === '助動詞' && nextToken.basic_form === 'ます') return 'It supplies the main action; the following ending makes it polite.';
+        return 'It supplies an action or state in the sentence.';
       }
-      if (token.pos === '形容詞') return token.basic_form === '*' ? 'Describes a quality or state.' : `Describes a quality or state; dictionary form: ${token.basic_form}.`;
-      if (token.pos === '助動詞' && token.basic_form === 'ます') return 'Polite ending attached to a verb.';
-      if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) return 'Copula: links a noun or description to “is/am/are”.';
-      if (token.pos === '助動詞') return `Adds grammatical meaning; dictionary form: ${token.basic_form}.`;
+      if (token.pos === '助動詞' && token.basic_form === 'ます' && previousToken) return 'It attaches to the preceding verb to make that action polite.';
+      if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) return 'It links the preceding description or noun to the sentence predicate.';
+      if (token.pos === '形容詞') return 'It describes the subject or topic of the sentence.';
+      return 'It contributes the content described by the surrounding grammar.';
+    }
+
+    function getGrammarExplanation(token, tokens, index) {
       if (token.pos === '記号') return 'Punctuation.';
-      return token.basic_form === '*' ? 'Names a person, place, thing, or idea.' : `Names a person, place, thing, or idea; dictionary form: ${token.basic_form}.`;
+      const meaning = getTokenMeaning(token);
+      const meaningText = meaning ? `Meaning: ${meaning}. ` : '';
+      const dictionaryText = token.basic_form && token.basic_form !== '*'
+        ? `Dictionary form: ${token.basic_form}. `
+        : '';
+      const conjugationText = token.conjugated_form && token.conjugated_form !== '*'
+        ? `Conjugation: ${token.conjugated_form}. `
+        : '';
+      if (token.pos === '助詞') return `${meaningText}${getGrammarRelationship(token, tokens, index)}`;
+      if (token.pos === '助動詞' && token.basic_form === 'ます') return 'Meaning: polite verb ending. It attaches to the preceding verb to make that action polite.';
+      if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) return 'Meaning: copula (“is/am/are”). It links the preceding description or noun to the sentence predicate.';
+      return `${meaningText}${dictionaryText}${conjugationText}${getGrammarRelationship(token, tokens, index)}`.trim();
     }
 
     function renderGrammarAnalysis(item) {
@@ -938,7 +974,7 @@
 
         const explanation = document.createElement('span');
         explanation.className = 'grammar-analysis-explanation';
-        explanation.textContent = getGrammarExplanation(token);
+        explanation.textContent = getGrammarExplanation(token, tokens, index);
 
         row.append(tokenText, reading, romaji, roleLabel, explanation);
         list.appendChild(row);
@@ -1149,7 +1185,6 @@
     function submitTypedAnswer() {
       const input = document.getElementById('answer-input');
       const val = input.value.trim().toLowerCase();
-      if (!val) return;
 
       const answer = sentenceAnswerMode === 'translation'
         ? val
@@ -1161,9 +1196,11 @@
       const fb = document.getElementById('feedback');
       document.getElementById('hint').classList.add('visible');
       const expectedAnswer = getExpectedValidationAnswer(currentQuestion);
+      const submittedAnswer = String(selected || '');
+      const isSkipped = !submittedAnswer.trim();
       const normalizedSelected = sentenceAnswerMode === 'translation'
-        ? selected.toLowerCase()
-        : readingKey(selected);
+        ? submittedAnswer.toLowerCase()
+        : readingKey(submittedAnswer);
       const expectedDisplayAnswer = getExpectedDisplayAnswer(currentQuestion);
       const isCorrect = normalizedSelected === expectedAnswer;
 
@@ -1172,7 +1209,8 @@
         answer: normalizedSelected,
         correctAnswer: expectedDisplayAnswer,
         meaning: currentQuestion.meaning,
-        isCorrect
+        isCorrect,
+        isSkipped
       });
       renderHistory();
 
@@ -1183,7 +1221,11 @@
         document.getElementById('submit-input-btn').disabled = true;
       }
 
-      if (isCorrect) {
+      if (isSkipped) {
+        fb.textContent = `Skipped. Correct: ${expectedDisplayAnswer}`;
+        fb.classList.add('incorrect');
+        streak = 0;
+      } else if (isCorrect) {
         if (button) button.classList.add('correct');
         fb.textContent = "Correct! (正解)";
         fb.classList.add('correct');
@@ -1217,17 +1259,19 @@
 
       answerHistory.forEach(item => {
         const entry = document.createElement('div');
-        entry.className = `history-item ${item.isCorrect ? 'correct' : 'incorrect'}`;
+        const resultClass = item.isSkipped ? 'skipped' : (item.isCorrect ? 'correct' : 'incorrect');
+        entry.className = `history-item ${resultClass}`;
 
         const prompt = document.createElement('div');
         prompt.className = 'history-prompt';
-        prompt.textContent = `${item.isCorrect ? 'Correct' : 'Incorrect'}: ${item.prompt}`;
+        const resultLabel = item.isSkipped ? 'Skipped' : (item.isCorrect ? 'Correct' : 'Incorrect');
+        prompt.textContent = `${resultLabel}: ${item.prompt}`;
 
         const detail = document.createElement('div');
         detail.className = 'history-detail';
         detail.textContent = item.isCorrect
           ? `${item.answer} · ${item.meaning}`
-          : `You: ${item.answer} · Correct: ${item.correctAnswer} · ${item.meaning}`;
+          : `${item.isSkipped ? 'Correct' : `You: ${item.answer} · Correct`}: ${item.correctAnswer} · ${item.meaning}`;
 
         entry.append(prompt, detail);
         historyList.appendChild(entry);
