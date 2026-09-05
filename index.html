@@ -508,6 +508,62 @@
         : displayAnswer.toLowerCase();
     }
 
+    function normalizeAnswer(answer) {
+      return answer.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function editSimilarity(first, second) {
+      const previous = Array.from({ length: second.length + 1 }, (_, index) => index);
+      for (let firstIndex = 1; firstIndex <= first.length; firstIndex += 1) {
+        const current = [firstIndex];
+        for (let secondIndex = 1; secondIndex <= second.length; secondIndex += 1) {
+          const changeCost = first[firstIndex - 1] === second[secondIndex - 1] ? 0 : 1;
+          current[secondIndex] = Math.min(
+            current[secondIndex - 1] + 1,
+            previous[secondIndex] + 1,
+            previous[secondIndex - 1] + changeCost
+          );
+        }
+        previous.splice(0, previous.length, ...current);
+      }
+      const longestLength = Math.max(first.length, second.length);
+      return longestLength ? 1 - previous[second.length] / longestLength : 1;
+    }
+
+    function answerSimilarity(correctAnswer, candidateAnswer) {
+      const correct = normalizeAnswer(correctAnswer);
+      const candidate = normalizeAnswer(candidateAnswer);
+      const correctWords = new Set(correct.split(' ').filter(Boolean));
+      const candidateWords = new Set(candidate.split(' ').filter(Boolean));
+      const sharedWords = [...correctWords].filter(word => candidateWords.has(word)).length;
+      const totalWords = new Set([...correctWords, ...candidateWords]).size;
+      const wordSimilarity = totalWords ? sharedWords / totalWords : 0;
+      const lengthSimilarity = 1 - Math.min(1, Math.abs(correct.length - candidate.length) / Math.max(correct.length, candidate.length, 1));
+
+      return editSimilarity(correct, candidate) * 0.55
+        + lengthSimilarity * 0.25
+        + wordSimilarity * 0.2;
+    }
+
+    function getSimilarWrongChoices(expectedAnswer) {
+      const candidates = vocabularyList
+        .filter(item => item.kind === currentQuestion.kind)
+        .map(item => getExpectedDisplayAnswer(item))
+        .filter(answer => answer !== expectedAnswer)
+        .filter((answer, index, answers) => answers.indexOf(answer) === index)
+        .map(answer => ({
+          answer,
+          similarity: answerSimilarity(expectedAnswer, answer)
+        }))
+        .sort((first, second) => second.similarity - first.similarity);
+
+      const strongestCandidates = candidates.slice(0, 3);
+      return strongestCandidates
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3)
+        .map(candidate => candidate.answer);
+    }
+
     function loadNextQuestion(keepCurrent = false) {
       if (!vocabularyList.length) return;
 
@@ -575,14 +631,9 @@
         grid.style.display = 'grid';
         inputContainer.style.display = 'none';
 
-        let wrongChoices = vocabularyList
-          .filter(item => item.kind === currentQuestion.kind)
-          .map(item => getExpectedDisplayAnswer(item))
-          .filter(answer => answer !== expectedAnswer)
-          .sort(() => Math.random() - 0.5)
-          .slice(0, 3)
+        const wrongChoices = getSimilarWrongChoices(expectedAnswer);
 
-        let options = [expectedAnswer, ...wrongChoices].sort(() => Math.random() - 0.5);
+        const options = [expectedAnswer, ...wrongChoices].sort(() => Math.random() - 0.5);
 
         grid.innerHTML = '';
         options.forEach(opt => {
