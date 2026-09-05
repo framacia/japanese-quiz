@@ -546,11 +546,28 @@
   <script>
     let vocabularyList = [];
     let currentQuestion = null;
-    const savedMode = localStorage.getItem('japanese-quiz-mode');
-    const savedContent = localStorage.getItem('japanese-quiz-content');
-    const savedScript = localStorage.getItem('japanese-quiz-script');
-    const savedAnswerMode = localStorage.getItem('japanese-quiz-answer-mode');
-    const savedGrammarColourMode = localStorage.getItem('japanese-quiz-grammar-colours');
+    const temporarySettings = new Map();
+    const quizStorage = {
+      get(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return temporarySettings.get(key) || null;
+        }
+      },
+      set(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch {
+          temporarySettings.set(key, value);
+        }
+      }
+    };
+    const savedMode = quizStorage.get('japanese-quiz-mode');
+    const savedContent = quizStorage.get('japanese-quiz-content');
+    const savedScript = quizStorage.get('japanese-quiz-script');
+    const savedAnswerMode = quizStorage.get('japanese-quiz-answer-mode');
+    const savedGrammarColourMode = quizStorage.get('japanese-quiz-grammar-colours');
     let currentMode = ['choice', 'type'].includes(savedMode) ? savedMode : 'choice';
     let currentContent = ['word', 'sentence'].includes(savedContent) ? savedContent : 'word';
     let currentScript = ['hiragana', 'katakana', 'all'].includes(savedScript) ? savedScript : 'hiragana';
@@ -584,11 +601,11 @@
       document.documentElement.style.setProperty('--accent', hex);
       document.documentElement.style.setProperty('--accent-glow', `rgba(${red}, ${green}, ${blue}, 0.25)`);
       document.getElementById('accent-picker').value = hex;
-      if (save) localStorage.setItem('japanese-quiz-accent', hex);
+      if (save) quizStorage.set('japanese-quiz-accent', hex);
     }
 
     function initializeAccentColor() {
-      const savedAccent = localStorage.getItem('japanese-quiz-accent');
+      const savedAccent = quizStorage.get('japanese-quiz-accent');
       const accent = /^#[0-9a-f]{6}$/i.test(savedAccent || '') ? savedAccent : defaultAccent;
       applyAccentColor(accent, false);
       document.getElementById('accent-picker').addEventListener('input', event => {
@@ -630,7 +647,7 @@
 
     function setMode(mode) {
       currentMode = mode;
-      localStorage.setItem('japanese-quiz-mode', mode);
+      quizStorage.set('japanese-quiz-mode', mode);
       document.getElementById('btn-quiz-mode').classList.toggle('active', mode === 'choice');
       document.getElementById('btn-type-mode').classList.toggle('active', mode === 'type');
       loadNextQuestion(true);
@@ -638,7 +655,7 @@
 
     function setContent(content) {
       currentContent = content;
-      localStorage.setItem('japanese-quiz-content', content);
+      quizStorage.set('japanese-quiz-content', content);
       document.getElementById('btn-word-content').classList.toggle('active', content === 'word');
       document.getElementById('btn-sentence-content').classList.toggle('active', content === 'sentence');
       updateGrammarColourVisibility();
@@ -666,7 +683,7 @@
 
     function setSentenceAnswerMode(mode) {
       sentenceAnswerMode = mode;
-      localStorage.setItem('japanese-quiz-answer-mode', mode);
+      quizStorage.set('japanese-quiz-answer-mode', mode);
       document.getElementById('btn-reading-answer').classList.toggle('active', mode === 'reading');
       document.getElementById('btn-translation-answer').classList.toggle('active', mode === 'translation');
       loadNextQuestion(true);
@@ -674,7 +691,7 @@
 
     function setGrammarColourMode(mode) {
       grammarColourMode = mode;
-      localStorage.setItem('japanese-quiz-grammar-colours', mode);
+      quizStorage.set('japanese-quiz-grammar-colours', mode);
       ['off', 'before', 'after'].forEach(option => {
         document.getElementById(`btn-grammar-${option}`).classList.toggle('active', option === mode);
       });
@@ -683,7 +700,7 @@
 
     function setScript(script) {
       currentScript = script;
-      localStorage.setItem('japanese-quiz-script', script);
+      quizStorage.set('japanese-quiz-script', script);
       document.getElementById('btn-hiragana-script').classList.toggle('active', script === 'hiragana');
       document.getElementById('btn-katakana-script').classList.toggle('active', script === 'katakana');
       document.getElementById('btn-all-script').classList.toggle('active', script === 'all');
