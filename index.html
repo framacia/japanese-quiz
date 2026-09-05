@@ -600,7 +600,6 @@
         const finish = ready => {
           if (settled) return;
           settled = true;
-          clearTimeout(timeout);
           resolve(ready);
         };
         const timeout = setTimeout(() => {
@@ -620,7 +619,10 @@
           return;
         }
         grammarWorker.onmessage = event => {
-          if (event.data.type === 'ready') finish(true);
+          if (event.data.type === 'ready') {
+            console.info('Kuromoji grammar tokenizer: ready');
+            finish(true);
+          }
           if (event.data.type === 'tokens') {
             const request = grammarTokenRequests.get(event.data.requestId);
             if (!request) return;
