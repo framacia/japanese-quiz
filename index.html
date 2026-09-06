@@ -744,6 +744,7 @@
       quizStorage.set('japanese-quiz-content', content);
       document.getElementById('btn-word-content').classList.toggle('active', content === 'word');
       document.getElementById('btn-sentence-content').classList.toggle('active', content === 'sentence');
+      document.getElementById('btn-all-script').textContent = content === 'word' ? 'Kanji' : 'All';
       updateGrammarColourVisibility();
       previousKana = '';
       loadNextQuestion();
@@ -763,6 +764,7 @@
       document.getElementById('btn-hiragana-script').classList.toggle('active', currentScript === 'hiragana');
       document.getElementById('btn-katakana-script').classList.toggle('active', currentScript === 'katakana');
       document.getElementById('btn-all-script').classList.toggle('active', currentScript === 'all');
+      document.getElementById('btn-all-script').textContent = currentContent === 'word' ? 'Kanji' : 'All';
       document.getElementById('btn-reading-answer').classList.toggle('active', sentenceAnswerMode === 'reading');
       document.getElementById('btn-translation-answer').classList.toggle('active', sentenceAnswerMode === 'translation');
     }
@@ -790,6 +792,7 @@
       document.getElementById('btn-hiragana-script').classList.toggle('active', script === 'hiragana');
       document.getElementById('btn-katakana-script').classList.toggle('active', script === 'katakana');
       document.getElementById('btn-all-script').classList.toggle('active', script === 'all');
+      document.getElementById('btn-all-script').textContent = currentContent === 'word' ? 'Kanji' : 'All';
       previousKana = '';
       loadNextQuestion();
     }
@@ -818,9 +821,9 @@
     }
 
     function hasKanji(item) {
-      const displayText = Array.isArray(item.furigana)
+      const displayText = item.kanji || (Array.isArray(item.furigana)
         ? item.furigana.map(segment => segment.text).join('')
-        : item.kana;
+        : item.kana);
       return /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(displayText);
     }
 
@@ -1362,7 +1365,7 @@
         : item.kind !== 'sentence');
       const scriptQuestions = contentQuestions.filter(item => {
         const hasKatakana = /[\u30A0-\u30FF]/.test(item.kana);
-        return currentScript === 'all'
+        return (currentContent === 'word' && currentScript === 'all' ? hasKanji(item) : currentScript === 'all')
           || (currentScript === 'katakana' && hasKatakana)
           || (currentScript === 'hiragana' && !hasKatakana);
       });
@@ -1394,7 +1397,9 @@
           });
         }
       } else {
-        jpDisplay.textContent = currentQuestion.kana;
+        jpDisplay.textContent = currentContent === 'word' && currentScript === 'all'
+          ? (currentQuestion.kanji || currentQuestion.kana)
+          : currentQuestion.kana;
       }
       jpDisplay.classList.toggle('grammar-colours-active', currentQuestion.kind === 'sentence'
         && grammarTokensByItem.has(currentQuestion) && shouldShowGrammarColours());
@@ -1404,7 +1409,9 @@
           if (tokens && currentQuestion === displayedQuestion) loadNextQuestion(true);
         });
       }
-      document.getElementById('kanji-sub').textContent = currentQuestion.kanji ? currentQuestion.kanji : '';
+      document.getElementById('kanji-sub').textContent = currentContent === 'word' && currentScript === 'all'
+        ? currentQuestion.kana
+        : (currentQuestion.kanji ? currentQuestion.kanji : '');
       
       const hintElem = document.getElementById('hint');
       hintElem.textContent = `Meaning: ${currentQuestion.meaning}`;
