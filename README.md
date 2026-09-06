@@ -15,7 +15,8 @@ Open [`quiz.html`](quiz.html) directly in a browser. No build step or local serv
 - Customizable accent colour with a saved preference
 - Optional noun, particle, verb, adjective, and auxiliary colour coding for sentences, shown before or after answering
 - Kuromoji-based Japanese morphological analysis for sentence grammar colouring, with a heuristic fallback if the analyser is unavailable
-- Post-answer grammar analysis showing each token's reading, romaji, role, translation, dictionary form, conjugation, and contextual relationship
+- Post-answer grammar analysis showing each token's reading, romaji, role, translation, and contextual relationship
+- Optional free online translation fallback for token meanings missing from the bundled vocabulary
 - Furigana displayed above kanji in sentences
 - Romaji answers for reading questions
 - Score, streak, question count, and answer history

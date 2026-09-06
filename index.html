@@ -298,9 +298,10 @@
 
     .grammar-analysis-row {
       display: grid;
-      grid-template-columns: minmax(70px, 0.8fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr);
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 2fr);
       gap: 8px;
       align-items: center;
+      min-width: 0;
       padding: 8px 10px;
       background: #0b0f19;
       border: 1px solid var(--border);
@@ -317,15 +318,21 @@
     .grammar-analysis-token { color: var(--text); font-size: 1rem; font-weight: 700; }
     .grammar-analysis-reading,
     .grammar-analysis-romaji,
-    .grammar-analysis-role { color: var(--text-dim); }
+    .grammar-analysis-role,
+    .grammar-analysis-meaning { color: var(--text-dim); }
     .grammar-analysis-reading { font-size: 0.75rem; }
     .grammar-analysis-romaji { font-size: 0.75rem; }
     .grammar-analysis-role { font-weight: 700; }
+    .grammar-analysis-meaning,
+    .grammar-analysis-explanation {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
     .grammar-analysis-explanation { color: var(--text); }
 
     @media (max-width: 560px) {
       .grammar-analysis-row {
-        grid-template-columns: minmax(55px, 0.8fr) minmax(70px, 1fr) minmax(70px, 1fr) minmax(80px, 1fr);
+        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr);
       }
 
       .grammar-analysis-explanation {
@@ -586,6 +593,9 @@
     let grammarRequestId = 0;
     const grammarTokenRequests = new Map();
     const grammarTokensByItem = new WeakMap();
+    const onlineGrammarMeanings = new Map();
+    const onlineGrammarLookupPromises = new Map();
+    const onlineGrammarCacheKey = 'japanese-quiz-online-grammar-meanings';
 
     function reportGrammarTokenizerError(message) {
       console.error('Kuromoji grammar tokenizer:', message);
@@ -600,6 +610,7 @@
         const finish = ready => {
           if (settled) return;
           settled = true;
+          clearTimeout(timeout);
           resolve(ready);
         };
         const timeout = setTimeout(() => {
@@ -653,12 +664,18 @@
         return new Promise(resolve => {
           const requestId = grammarRequestId++;
           grammarTokenRequests.set(requestId, { resolve });
-          grammarWorker.postMessage({ type: 'tokenize', requestId, text: item.kanji || item.kana });
+          grammarWorker.postMessage({ type: 'tokenize', requestId, text: getSentenceSurfaceText(item) });
         }).then(tokens => {
           if (tokens) grammarTokensByItem.set(item, tokens);
           return tokens;
         });
       });
+    }
+
+    function getSentenceSurfaceText(item) {
+      if (item.kanji) return item.kanji;
+      if (Array.isArray(item.furigana)) return item.furigana.map(segment => segment.text || '').join('');
+      return item.kana;
     }
 
     function applyAccentColor(color, save = true) {
@@ -982,10 +999,15 @@
       'ます': 'polite verb ending',
       'です': 'copula; is, am, are',
       'だ': 'plain copula; is, am, are',
+      'た': 'past-tense ending',
+      'て': 'connecting or auxiliary form',
       'ない': 'not; negative auxiliary',
       'する': 'to do',
+      'ん': 'nominalizer or explanatory ending',
       '日本語': 'Japanese language',
       'にほんご': 'Japanese language',
+      '心': 'heart, mind',
+      'こころ': 'heart, mind',
       '毎日': 'every day',
       'まいにち': 'every day',
       '勉強': 'study',
@@ -998,16 +1020,81 @@
       const reading = token.reading ? wanakana.toHiragana(token.reading) : '';
       const grammaticalGloss = grammarTokenGlosses[token.basic_form]
         || grammarTokenGlosses[token.surface_form]
-        || grammarTokenGlosses[reading];
-      if (grammaticalGloss && (token.pos === '助詞' || token.pos === '助動詞' || token.pos === '記号')) {
+        || (['助詞', '助動詞'].includes(token.pos) ? grammarTokenGlosses[reading] : '');
+      if (grammaticalGloss) {
         return grammaticalGloss;
       }
       const wordItems = vocabularyList.filter(item => item.kind !== 'sentence');
+      const basicReading = token.basic_form && token.basic_form !== '*'
+        ? wanakana.toHiragana(token.basic_form)
+        : '';
       const exactBasicMatch = wordItems.find(item => item.kanji && item.kanji === token.basic_form);
-      if (exactBasicMatch) return exactBasicMatch.meaning;
-      const exactKanaMatch = wordItems.find(item => item.kana === reading);
-      const match = exactKanaMatch || wordItems.find(item => item.kanji && item.kanji === token.surface_form);
+      const exactKanaMatch = wordItems.find(item => item.kana === reading || item.kana === basicReading);
+      const surfaceMatch = wordItems.find(item => item.kanji === token.surface_form || item.kana === token.surface_form);
+      const match = exactBasicMatch || exactKanaMatch || surfaceMatch;
       return match ? match.meaning : (grammaticalGloss || '');
+    }
+
+    function getTokenLookupKey(token) {
+      const reading = token.reading && token.reading !== '*' ? wanakana.toHiragana(token.reading) : '';
+      const basicForm = token.basic_form && token.basic_form !== '*' ? token.basic_form : '';
+      return basicForm || token.surface_form || reading;
+    }
+
+    function loadOnlineGrammarMeanings() {
+      const saved = quizStorage.get(onlineGrammarCacheKey);
+      if (!saved) return;
+      try {
+        Object.entries(JSON.parse(saved)).forEach(([key, meaning]) => onlineGrammarMeanings.set(key, meaning));
+      } catch (error) {
+        console.warn('Online grammar meaning cache could not be read:', error);
+      }
+    }
+
+    function saveOnlineGrammarMeanings() {
+      quizStorage.set(onlineGrammarCacheKey, JSON.stringify(Object.fromEntries(onlineGrammarMeanings)));
+    }
+
+    loadOnlineGrammarMeanings();
+
+    async function lookupOnlineGrammarMeaning(token) {
+      const key = getTokenLookupKey(token);
+      if (!key || getTokenMeaning(token)) return getTokenMeaning(token);
+      if (onlineGrammarMeanings.has(key)) return onlineGrammarMeanings.get(key);
+      if (onlineGrammarLookupPromises.has(key)) return onlineGrammarLookupPromises.get(key);
+
+      const lookupPromise = fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&q=${encodeURIComponent(key)}`)
+        .then(response => response.ok ? response.json() : null)
+        .then(payload => {
+          const meaning = Array.isArray(payload?.[0])
+            ? payload[0].map(part => part?.[0]).filter(Boolean).join(' ')
+            : '';
+          if (meaning) {
+            onlineGrammarMeanings.set(key, meaning);
+            saveOnlineGrammarMeanings();
+          }
+          return meaning;
+        })
+        .catch(error => {
+          console.warn(`Online grammar lookup failed for ${key}:`, error);
+          return '';
+        })
+        .finally(() => onlineGrammarLookupPromises.delete(key));
+
+      onlineGrammarLookupPromises.set(key, lookupPromise);
+      return lookupPromise;
+    }
+
+    async function enrichGrammarAnalysis(rows) {
+      const missingRows = rows.filter(row => !getTokenMeaning(row.token)
+        && !['助詞', '助動詞', '記号'].includes(row.token.pos));
+      await Promise.all(missingRows.map(async row => {
+        row.meaning.textContent = 'Looking up meaning online';
+        const meaning = await lookupOnlineGrammarMeaning(row.token);
+        if (row.explanation.isConnected) {
+          row.meaning.textContent = meaning || 'meaning not found in the vocabulary entry';
+        }
+      }));
     }
 
     function getGrammarRelationship(token, tokens, index) {
@@ -1043,27 +1130,38 @@
       return 'It contributes the content described by the surrounding grammar.';
     }
 
-    function getGrammarExplanation(token, tokens, index) {
+    function joinGrammarSentences(first, second) {
+      const firstSentence = first.trim().replace(/[.!?]+$/, '');
+      const secondSentence = second.trim().replace(/[.!?]+$/, '');
+      return `${firstSentence}. ${secondSentence}.`;
+    }
+
+    function getGrammarRomaji(token) {
+      if (token.pos === '助詞' && token.surface_form === 'は') return 'wa';
+      return token.reading ? wanakana.toRomaji(token.reading) : '—';
+    }
+
+    function getGrammarMeaning(token) {
       const meaning = getTokenMeaning(token);
       const fallbackMeaning = token.pos === '記号'
-        ? 'punctuation; it marks a pause or the end of the sentence'
+        ? ''
         : token.pos === '助詞'
           ? 'grammatical particle; its exact nuance depends on context'
           : token.pos === '助動詞'
             ? 'grammatical auxiliary; it adds tense, politeness, or sentence-predicate information'
-            : 'content word; use the sentence translation to understand its meaning here';
-      const meaningText = `Meaning: ${meaning || fallbackMeaning}. `;
-      const dictionaryText = token.basic_form && token.basic_form !== '*'
-        ? `Dictionary form: ${token.basic_form}. `
-        : '';
-      const conjugationText = token.conjugated_form && token.conjugated_form !== '*'
-        ? `Conjugation: ${token.conjugated_form}. `
-        : '';
-      if (token.pos === '記号') return meaningText.trim();
-      if (token.pos === '助詞') return `${meaningText}${dictionaryText}${getGrammarRelationship(token, tokens, index)}`;
-      if (token.pos === '助動詞' && token.basic_form === 'ます') return `${meaningText}${dictionaryText}${conjugationText}It attaches to the preceding verb to make that action polite.`;
-      if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) return `${meaningText}${dictionaryText}${conjugationText}It links the preceding description or noun to the sentence predicate.`;
-      return `${meaningText}${dictionaryText}${conjugationText}${getGrammarRelationship(token, tokens, index)}`.trim();
+            : 'meaning not found in the vocabulary entry';
+      return meaning || fallbackMeaning;
+    }
+
+    function getGrammarExplanation(token, tokens, index) {
+      if (token.pos === '記号') return '';
+      if (token.pos === '助動詞' && token.basic_form === 'ます') {
+        return 'It attaches to the preceding verb to make that action polite.';
+      }
+      if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) {
+        return 'It links the preceding description or noun to the sentence predicate.';
+      }
+      return getGrammarRelationship(token, tokens, index);
     }
 
     function renderGrammarAnalysis(item) {
@@ -1076,8 +1174,9 @@
         return;
       }
 
+      const rows = [];
       tokens.forEach((token, index) => {
-        if (/^[？?]$/.test(token.surface_form) && index > 0 && tokens[index - 1].surface_form === 'か') return;
+        if (token.pos === '記号' || /^[、。！？,.!?]$/.test(token.surface_form)) return;
         const role = classifyMorphologyToken(token);
         const row = document.createElement('div');
         row.className = `grammar-analysis-row ${role}`;
@@ -1092,26 +1191,29 @@
 
         const romaji = document.createElement('span');
         romaji.className = 'grammar-analysis-romaji';
-        romaji.textContent = token.reading ? wanakana.toRomaji(token.reading) : '—';
+        romaji.textContent = getGrammarRomaji(token);
 
         const roleLabel = document.createElement('span');
         roleLabel.className = 'grammar-analysis-role';
         roleLabel.textContent = getGrammarRoleLabel(token);
 
+        const meaning = document.createElement('span');
+        meaning.className = 'grammar-analysis-meaning';
+        meaning.textContent = getGrammarMeaning(token);
+
         const explanation = document.createElement('span');
         explanation.className = 'grammar-analysis-explanation';
         explanation.textContent = getGrammarExplanation(token, tokens, index);
 
-        row.append(tokenText, reading, romaji, roleLabel, explanation);
+        row.append(tokenText, reading, romaji, roleLabel, meaning, explanation);
         list.appendChild(row);
+        rows.push({ token, meaning, explanation, index });
       });
+      enrichGrammarAnalysis(rows);
       analysis.classList.add('visible');
     }
 
     function renderMorphologicalSentence(item, display, tokens) {
-      const sourceReading = item.kana || '';
-      const normalizedSourceReading = wanakana.toHiragana(sourceReading);
-      let sourceCursor = 0;
       tokens.forEach((token, index) => {
         const isRedundantQuestionMark = /^[？?]$/.test(token.surface_form)
           && index > 0
@@ -1120,21 +1222,11 @@
         const tokenReading = token.reading && token.reading !== '*'
           ? token.reading
           : token.surface_form;
-        const normalizedTokenReading = wanakana.toHiragana(tokenReading);
-        const sourceIndex = currentScript === 'all' && normalizedTokenReading
-          ? normalizedSourceReading.indexOf(normalizedTokenReading, sourceCursor)
-          : -1;
-        let reading = tokenReading;
-        if (sourceIndex >= 0) {
-          reading = sourceReading.slice(sourceIndex, sourceIndex + normalizedTokenReading.length);
-          sourceCursor = sourceIndex + normalizedTokenReading.length;
-        } else if (currentScript === 'hiragana') {
-          reading = wanakana.toHiragana(tokenReading);
-        } else if (currentScript === 'katakana') {
-          reading = wanakana.toKatakana(tokenReading);
-        }
+        const reading = currentScript === 'katakana'
+          ? wanakana.toKatakana(tokenReading)
+          : wanakana.toHiragana(tokenReading);
         display.append(renderGrammarSegment({
-          text: reading,
+          text: token.surface_form,
           reading,
           role: classifyMorphologyToken(token)
         }));
