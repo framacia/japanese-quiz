@@ -666,8 +666,9 @@
           grammarTokenRequests.set(requestId, { resolve });
           grammarWorker.postMessage({ type: 'tokenize', requestId, text: getSentenceSurfaceText(item) });
         }).then(tokens => {
-          if (tokens) grammarTokensByItem.set(item, tokens);
-          return tokens;
+          const normalizedTokens = tokens ? normalizeGrammarTokens(item, tokens) : tokens;
+          if (normalizedTokens) grammarTokensByItem.set(item, normalizedTokens);
+          return normalizedTokens;
         });
       });
     }
@@ -676,6 +677,41 @@
       if (item.kanji) return item.kanji;
       if (Array.isArray(item.furigana)) return item.furigana.map(segment => segment.text || '').join('');
       return item.kana;
+    }
+
+    function normalizeGrammarTokens(item, tokens) {
+      if (!Array.isArray(item.furigana)) return tokens;
+      const wordItems = vocabularyList.filter(entry => entry.kind !== 'sentence');
+      const normalizedTokens = [];
+      let tokenIndex = 0;
+
+      item.furigana.forEach(segment => {
+        const segmentText = segment.text || '';
+        const segmentReading = segment.reading || segmentText;
+        if (!segmentText) return;
+        let combinedSurface = '';
+        const segmentTokens = [];
+        while (tokenIndex < tokens.length && combinedSurface.length < segmentText.length) {
+          const token = tokens[tokenIndex++];
+          segmentTokens.push(token);
+          combinedSurface += token.surface_form;
+        }
+        const lexicalEntry = wordItems.find(entry =>
+          entry.kana === segmentReading || entry.kanji === segmentText);
+        if (lexicalEntry && combinedSurface === segmentText && segmentTokens.length > 1) {
+          normalizedTokens.push({
+            ...segmentTokens[0],
+            surface_form: segmentText,
+            basic_form: segmentText,
+            reading: segmentReading,
+            pos: segmentTokens[0].basic_form === segmentText ? segmentTokens[0].pos : '副詞'
+          });
+        } else {
+          normalizedTokens.push(...segmentTokens);
+        }
+      });
+      normalizedTokens.push(...tokens.slice(tokenIndex));
+      return normalizedTokens;
     }
 
     function applyAccentColor(color, save = true) {
@@ -964,6 +1000,7 @@
 
     function classifyMorphologyToken(token) {
       if (token.pos === '助詞') return 'particle';
+      if (token.basic_form === 'くださる' || token.surface_form === 'ください') return 'auxiliary';
       if (token.pos === '動詞') return 'verb';
       if (token.pos === '形容詞') return 'adjective';
       if (token.pos === '助動詞') {
@@ -975,8 +1012,10 @@
 
     function getGrammarRoleLabel(token) {
       if (token.pos === '助詞') return 'Particle';
+      if (token.basic_form === 'くださる' || token.surface_form === 'ください') return 'Request ending';
       if (token.pos === '動詞') return 'Verb';
       if (token.pos === '形容詞') return 'Adjective';
+      if (token.pos === '副詞') return 'Adverb';
       if (token.pos === '助動詞' && /^(ます|です|だ)$/.test(token.basic_form)) return 'Verb ending';
       if (token.pos === '助動詞') return 'Auxiliary';
       if (token.pos === '記号') return 'Punctuation';
@@ -1158,6 +1197,9 @@
       }
       if (token.pos === '助動詞' && token.basic_form === 'ます' && previousToken) return 'It attaches to the preceding verb to make that action polite.';
       if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) return 'It links the preceding description or noun to the sentence predicate.';
+      if (token.basic_form === 'くださる' || token.surface_form === 'ください') {
+        return 'It turns the preceding て-form into a polite request.';
+      }
       if (token.pos === '形容詞') return 'It describes the subject or topic of the sentence.';
       return 'It contributes the content described by the surrounding grammar.';
     }
@@ -1192,6 +1234,9 @@
       }
       if (token.pos === '助動詞' && /^(です|だ)$/.test(token.basic_form)) {
         return 'It links the preceding description or noun to the sentence predicate.';
+      }
+      if (token.basic_form === 'くださる' || token.surface_form === 'ください') {
+        return 'It turns the preceding て-form into a polite request.';
       }
       return getGrammarRelationship(token, tokens, index);
     }
