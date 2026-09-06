@@ -796,20 +796,17 @@
 
     function getSentenceReading(item) {
       if (!Array.isArray(item.furigana)) return wanakana.toHiragana(item.kana);
-      const surfaceText = item.kanji || item.kana;
-      const hasParticleInKanjiSentence = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(surfaceText)
-        && surfaceText.includes('は');
+      const tokens = grammarTokensByItem.get(item);
+      if (tokens) {
+        return tokens.map(token => {
+          const reading = token.reading && token.reading !== '*' ? token.reading : token.surface_form;
+          return token.pos === '助詞' && token.surface_form === 'は' ? 'わ' : reading;
+        }).join('');
+      }
       return item.furigana.map(segment => {
         const reading = segment.reading || segment.text;
         const text = segment.text || '';
-        if (text.endsWith('は') && reading.endsWith('は')) {
-          return `${reading.slice(0, -1)}わ`;
-        }
-        if (hasParticleInKanjiSentence && reading.includes('は')) {
-          const particleIndex = reading.lastIndexOf('は');
-          return `${reading.slice(0, particleIndex)}わ${reading.slice(particleIndex + 1)}`;
-        }
-        return reading;
+        return text === 'は' && reading === 'は' ? 'わ' : reading;
       }).join('');
     }
 
@@ -993,9 +990,20 @@
       'の': 'possessive or descriptive linker; of',
       'と': 'companion or quotation marker; with, and',
       'も': 'also, too marker',
+      'や': 'listing marker; things like',
       'から': 'starting point marker; from',
       'まで': 'limit marker; until, up to',
       'か': 'question marker',
+      'よ': 'sentence-ending emphasis marker',
+      'ね': 'sentence-ending agreement marker',
+      'て': 'connecting form; and then',
+      'だけ': 'only marker',
+      'しか': 'only marker used with a negative expression',
+      'ほど': 'extent or comparison marker; to the extent of',
+      'くらい': 'approximate extent marker; about',
+      'より': 'comparison marker; than',
+      'ので': 'reason or cause marker; because',
+      'のに': 'contrast marker; although, despite',
       'ます': 'polite verb ending',
       'です': 'copula; is, am, are',
       'だ': 'plain copula; is, am, are',
@@ -1100,7 +1108,6 @@
     function getGrammarRelationship(token, tokens, index) {
       const nextToken = tokens[index + 1];
       const previousToken = tokens[index - 1];
-      const nextParticle = nextToken && nextToken.pos === '助詞' ? nextToken.surface_form : '';
       const particleRelationships = {
         'は': 'sets this section as the sentence topic',
         'が': 'marks this section as the subject or focus',
@@ -1110,15 +1117,37 @@
         'に': 'marks this section as a destination, time, target, or location',
         'の': 'links this section to the following noun as a description or possession',
         'と': 'links this section as a companion or quotation',
-        'も': 'adds the meaning “also” or “too” to this section'
+        'も': 'adds the meaning “also” or “too” to this section',
+        'や': 'lists this section as one example among others',
+        'から': 'marks this section as the starting point or reason',
+        'まで': 'marks this section as the endpoint or limit',
+        'より': 'marks this section as the point of comparison'
+      };
+
+      const getParticleRelationship = (particle, particleIndex = index) => {
+        const particleNextToken = tokens[particleIndex + 1];
+        const isSentenceEnd = !particleNextToken || particleNextToken.pos === '記号';
+        if (particleRelationships[particle]) return particleRelationships[particle];
+        if (particle === 'よ' && isSentenceEnd) return 'adds emphasis to the statement for the listener';
+        if (particle === 'ね' && isSentenceEnd) return 'seeks agreement or shared understanding';
+        if (particle === 'か' && isSentenceEnd) return 'marks the sentence as a question';
+        if (particle === 'か') return 'links alternatives with the meaning “or”';
+        if (particle === 'て' && nextToken && /^(ください|下さい)$/.test(nextToken.basic_form || nextToken.surface_form)) {
+          return 'links the preceding action to ください to form a polite request';
+        }
+        if (particle === 'て' || particle === 'で') return 'connects this action or state to the following clause';
+        if (particle === 'ので') return 'introduces the reason for the following clause';
+        if (particle === 'のに') return 'contrasts this clause with the following result';
+        if (isSentenceEnd) return 'adds sentence-ending nuance to the preceding section';
+        if (particleNextToken && particleNextToken.pos === '名詞') return 'links the preceding section to the following noun';
+        return 'marks the preceding section in relation to the following action or description';
       };
 
       if (token.pos === '助詞') {
-        const relation = particleRelationships[token.surface_form];
-        return relation ? `It ${relation}.` : 'It connects this section to the rest of the sentence; its exact function depends on context.';
+        return `It ${getParticleRelationship(token.surface_form)}.`;
       }
-      if (nextParticle && particleRelationships[nextParticle]) {
-        return `The following ${nextParticle} particle ${particleRelationships[nextParticle].replace('this section', 'it')}.`;
+      if (nextToken && nextToken.pos === '助詞') {
+        return `The following ${nextToken.surface_form} particle ${getParticleRelationship(nextToken.surface_form, index + 1).replace('this section', 'it')}.`;
       }
       if (token.pos === '動詞') {
         if (nextToken && nextToken.pos === '助動詞' && nextToken.basic_form === 'ます') return 'It supplies the main action; the following ending makes it polite.';
